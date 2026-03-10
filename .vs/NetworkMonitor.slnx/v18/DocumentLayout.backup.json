@@ -1,0 +1,109 @@
+{
+  "Version": 1,
+  "WorkspaceRootPath": "D:\\Code\\NetworkMonitor\\",
+  "Documents": [
+    {
+      "AbsoluteMoniker": "D:0:0:{6CCAB37F-E27F-CFB8-C485-39B89FB6175D}|NetworkMonitor\\NetworkMonitor.csproj|d:\\code\\networkmonitor\\networkmonitor\\networkengine.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{6CCAB37F-E27F-CFB8-C485-39B89FB6175D}|NetworkMonitor\\NetworkMonitor.csproj|solutionrelative:networkmonitor\\networkengine.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{6CCAB37F-E27F-CFB8-C485-39B89FB6175D}|NetworkMonitor\\NetworkMonitor.csproj|d:\\code\\networkmonitor\\networkmonitor\\mainwindow.xaml||{F11ACC28-31D1-4C80-A34B-F4E09D3D753C}",
+      "RelativeMoniker": "D:0:0:{6CCAB37F-E27F-CFB8-C485-39B89FB6175D}|NetworkMonitor\\NetworkMonitor.csproj|solutionrelative:networkmonitor\\mainwindow.xaml||{F11ACC28-31D1-4C80-A34B-F4E09D3D753C}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{6CCAB37F-E27F-CFB8-C485-39B89FB6175D}|NetworkMonitor\\NetworkMonitor.csproj|d:\\code\\networkmonitor\\networkmonitor\\mainwindow.xaml.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{6CCAB37F-E27F-CFB8-C485-39B89FB6175D}|NetworkMonitor\\NetworkMonitor.csproj|solutionrelative:networkmonitor\\mainwindow.xaml.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{6CCAB37F-E27F-CFB8-C485-39B89FB6175D}|NetworkMonitor\\NetworkMonitor.csproj|d:\\code\\networkmonitor\\networkmonitor\\models.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{6CCAB37F-E27F-CFB8-C485-39B89FB6175D}|NetworkMonitor\\NetworkMonitor.csproj|solutionrelative:networkmonitor\\models.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{6CCAB37F-E27F-CFB8-C485-39B89FB6175D}|NetworkMonitor\\NetworkMonitor.csproj|d:\\code\\networkmonitor\\networkmonitor\\systemmonitor.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{6CCAB37F-E27F-CFB8-C485-39B89FB6175D}|NetworkMonitor\\NetworkMonitor.csproj|solutionrelative:networkmonitor\\systemmonitor.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    }
+  ],
+  "DocumentGroupContainers": [
+    {
+      "Orientation": 0,
+      "VerticalTabListWidth": 256,
+      "DocumentGroups": [
+        {
+          "DockedWidth": 200,
+          "SelectedChildIndex": 4,
+          "Children": [
+            {
+              "$type": "Document",
+              "DocumentIndex": 1,
+              "Title": "MainWindow.xaml",
+              "DocumentMoniker": "D:\\Code\\NetworkMonitor\\NetworkMonitor\\MainWindow.xaml",
+              "RelativeDocumentMoniker": "NetworkMonitor\\MainWindow.xaml",
+              "ToolTip": "D:\\Code\\NetworkMonitor\\NetworkMonitor\\MainWindow.xaml",
+              "RelativeToolTip": "NetworkMonitor\\MainWindow.xaml",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.003549|",
+              "WhenOpened": "2026-03-01T17:25:42.606Z",
+              "IsPinned": true
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:0:0:{40ea2e6b-2121-4bb8-a43e-c83c04b51041}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:0:0:{3ae79031-e1bc-11d0-8f78-00a0c9110057}"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 2,
+              "Title": "MainWindow.xaml.cs",
+              "DocumentMoniker": "D:\\Code\\NetworkMonitor\\NetworkMonitor\\MainWindow.xaml.cs",
+              "RelativeDocumentMoniker": "NetworkMonitor\\MainWindow.xaml.cs",
+              "ToolTip": "D:\\Code\\NetworkMonitor\\NetworkMonitor\\MainWindow.xaml.cs",
+              "RelativeToolTip": "NetworkMonitor\\MainWindow.xaml.cs",
+              "ViewState": "AgIAAC0WAAAAAAAAAADwvzIWAAARAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-03-01T17:25:41.401Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 0,
+              "Title": "NetworkEngine.cs",
+              "DocumentMoniker": "D:\\Code\\NetworkMonitor\\NetworkMonitor\\NetworkEngine.cs",
+              "RelativeDocumentMoniker": "NetworkMonitor\\NetworkEngine.cs",
+              "ToolTip": "D:\\Code\\NetworkMonitor\\NetworkMonitor\\NetworkEngine.cs",
+              "RelativeToolTip": "NetworkMonitor\\NetworkEngine.cs",
+              "ViewState": "AgIAAK8AAAAAAAAAAAAUwLoAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-03-09T09:03:23.442Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 4,
+              "Title": "SystemMonitor.cs",
+              "DocumentMoniker": "D:\\Code\\NetworkMonitor\\NetworkMonitor\\SystemMonitor.cs",
+              "RelativeDocumentMoniker": "NetworkMonitor\\SystemMonitor.cs",
+              "ToolTip": "D:\\Code\\NetworkMonitor\\NetworkMonitor\\SystemMonitor.cs",
+              "RelativeToolTip": "NetworkMonitor\\SystemMonitor.cs",
+              "ViewState": "AgIAAE4AAAAAAAAAAAAuwFcAAAAuAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-03-09T09:06:17.63Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 3,
+              "Title": "Models.cs",
+              "DocumentMoniker": "D:\\Code\\NetworkMonitor\\NetworkMonitor\\Models.cs",
+              "RelativeDocumentMoniker": "NetworkMonitor\\Models.cs",
+              "ToolTip": "D:\\Code\\NetworkMonitor\\NetworkMonitor\\Models.cs",
+              "RelativeToolTip": "NetworkMonitor\\Models.cs",
+              "ViewState": "AgIAAMsAAAAAAAAAAIAzwNIAAAA+AAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-03-09T08:50:54.886Z"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

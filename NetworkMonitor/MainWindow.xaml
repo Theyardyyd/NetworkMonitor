@@ -1,0 +1,1464 @@
+﻿<Window x:Class="NetworkMonitor.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="System DashBoard v1.8.3" Height="720" Width="1100" 
+        Background="{DynamicResource BgMainBrush}" 
+        WindowStartupLocation="CenterScreen">
+    <Window.Resources>
+        <SolidColorBrush x:Key="BgMainBrush" Color="#121216" />
+        <SolidColorBrush x:Key="BgCardBrush" Color="#18181e" />
+        <SolidColorBrush x:Key="BgNavBrush" Color="#1a1a20" />
+
+        <SolidColorBrush x:Key="TextMainBrush" Color="White" />
+        <SolidColorBrush x:Key="TextDimBrush" Color="#aaaaaa" />
+
+        <SolidColorBrush x:Key="BgInputBrush" Color="#222222" />
+        <SolidColorBrush x:Key="BorderMainBrush" Color="#333333" />
+        <SolidColorBrush x:Key="HeatmapEmptyBrush" Color="#28282d" />
+        <SolidColorBrush x:Key="GridLineBrush" Color="#28ffffff" />
+
+        <Style TargetType="Button">
+            <Setter Property="Foreground" Value="{DynamicResource TextMainBrush}"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="border" Background="{TemplateBinding Background}" 
+                                BorderBrush="{TemplateBinding BorderBrush}" 
+                                BorderThickness="{TemplateBinding BorderThickness}" 
+                                CornerRadius="4">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="border" Property="Opacity" Value="0.8"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="border" Property="Opacity" Value="0.6"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="border" Property="Opacity" Value="0.4"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="NavButtonStyle" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextDimBrush}"/>
+            <Setter Property="BorderThickness" Value="0,0,0,3"/>
+            <Setter Property="BorderBrush" Value="Transparent"/>
+            <Setter Property="Padding" Value="15,5"/>
+            <Setter Property="Margin" Value="0,0,10,0"/>
+            <Setter Property="FontSize" Value="14"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+        </Style>
+
+        <Style TargetType="ComboBox">
+            <Setter Property="Foreground" Value="{DynamicResource TextMainBrush}"/>
+        </Style>
+        <Style TargetType="ComboBoxItem">
+            <Setter Property="Foreground" Value="{DynamicResource TextMainBrush}"/>
+            <Setter Property="Background" Value="{DynamicResource BgCardBrush}"/>
+            <Setter Property="BorderThickness" Value="0"/>
+        </Style>
+        <Style TargetType="DatePickerTextBox">
+            <Setter Property="Background" Value="{DynamicResource BgInputBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextMainBrush}"/>
+            <Setter Property="BorderThickness" Value="0"/>
+        </Style>
+        <Style TargetType="DatePicker">
+            <Setter Property="Background" Value="{DynamicResource BgInputBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextMainBrush}"/>
+            <Setter Property="BorderThickness" Value="0"/>
+        </Style>
+
+        <Style TargetType="ToolTip">
+            <Setter Property="Background" Value="{DynamicResource BgCardBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextMainBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderMainBrush}"/>
+        </Style>
+        <Style TargetType="DataGridColumnHeader">
+            <Setter Property="Background" Value="{DynamicResource BgNavBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextDimBrush}"/>
+            <Setter Property="Padding" Value="10,5"/>
+            <Setter Property="BorderThickness" Value="0"/>
+        </Style>
+    </Window.Resources>
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="60"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <!-- 顶部导航栏 -->
+        <Border Background="{DynamicResource BgNavBrush}" BorderBrush="#2a2a35" BorderThickness="0,0,0,1">
+            <Grid Margin="20,0">
+                <TextBlock Text="DASHBOARD" Foreground="{DynamicResource TextMainBrush}" FontSize="18" FontWeight="Black" VerticalAlignment="Center" HorizontalAlignment="Left"/>
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                    <Button x:Name="NavTraffic" Content="📊 流量监控" Style="{StaticResource NavButtonStyle}" Click="Nav_Click"/>
+                    
+                    
+                    <Button x:Name="NavSystem" Content="📈 系统概览" Style="{StaticResource NavButtonStyle}" Click="Nav_Click"/>
+                    
+                    <Button x:Name="NavResources" Content="💻 资源分配" Style="{StaticResource NavButtonStyle}" Click="Nav_Click"/>
+                    
+                    <Button x:Name="NavLog" Content="🔔 警报与日志" Style="{StaticResource NavButtonStyle}" Click="Nav_Click"/>
+                    
+                    <Button x:Name="NavLauncher" Content="🚀 应用时光机" Style="{StaticResource NavButtonStyle}" Click="Nav_Click"/>
+
+                    <Button x:Name="NavScanner" Content="🔍 局域网扫描" Style="{StaticResource NavButtonStyle}" Click="Nav_Click"/>
+                    <Button x:Name="NavSettings" Content="⚙️ 偏好设置" Style="{StaticResource NavButtonStyle}" Click="Nav_Click"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+        <Grid Grid.Row="1" Margin="20">
+            <ScrollViewer x:Name="ViewTraffic" Visibility="Visible" VerticalScrollBarVisibility="Auto" Padding="0,0,10,0">
+                <Grid MinHeight="{Binding ActualHeight, RelativeSource={RelativeSource AncestorType=ScrollViewer}}">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*" MinHeight="250"/>
+                        <RowDefinition Height="100"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="0" x:Name="ProcessListRow"/>
+                    </Grid.RowDefinitions>
+
+                    <Grid Grid.Row="0" Margin="0,0,0,15">
+                        <StackPanel Orientation="Horizontal">
+                        <TextBlock x:Name="TxtDown" Text="下载: 0 KB/s" Foreground="#FF2277" FontSize="20" FontWeight="Bold" Width="200"/>
+                        <TextBlock x:Name="TxtUp" Text="上传: 0 KB/s" Foreground="#00E5FF" FontSize="20" FontWeight="Bold" Width="200"/>
+                    </StackPanel>
+
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
+                        <StackPanel x:Name="CustomTimePanel" Orientation="Horizontal" Visibility="Collapsed" Margin="0,0,10,0">
+                            <TextBox x:Name="TxtCustomTime" Width="60" Background="{DynamicResource BgInputBrush}" Foreground="{DynamicResource TextMainBrush}" Text="60" Padding="2" VerticalContentAlignment="Center"/>
+                            <TextBlock Text="秒" Foreground="{DynamicResource TextDimBrush}" VerticalAlignment="Center" Margin="5,0"/>
+                            <Button Content="应用" Click="BtnApplyCustomTime_Click" Background="#FF2277" Foreground="{DynamicResource TextMainBrush}" BorderThickness="0" Padding="10,2" Cursor="Hand"/>
+                        </StackPanel>
+
+                        <ComboBox x:Name="TimeWindowCombo" Width="100" Margin="0,0,15,0" Padding="5,2" Background="{DynamicResource BgMainBrush}" Foreground="{DynamicResource TextMainBrush}" BorderBrush="{DynamicResource BorderMainBrush}" SelectionChanged="TimeWindowCombo_SelectionChanged">
+                            <ComboBoxItem Content="1 分钟" Tag="60" IsSelected="True"/>
+                            <ComboBoxItem Content="5 分钟" Tag="300"/>
+                            <ComboBoxItem Content="30 分钟" Tag="1800"/>
+                            <ComboBoxItem Content="3 小时" Tag="10800"/>
+                            <ComboBoxItem Content="24 小时" Tag="86400"/>
+                            <ComboBoxItem Content="7 天" Tag="604800"/>
+                            <ComboBoxItem Content="30 天" Tag="2592000"/>
+                            <ComboBoxItem Content="自定义..." Tag="-1"/>
+                        </ComboBox>
+                        <Button Content="🔄 UNIT: BIT / BYTE" Padding="15,5" Background="{DynamicResource BgMainBrush}" Foreground="#00E5FF" BorderBrush="{DynamicResource BorderMainBrush}" Click="BtnToggleUnit_Click" Cursor="Hand"/>
+                    </StackPanel>
+                </Grid>
+
+                <Border Grid.Row="1" BorderBrush="{DynamicResource BorderMainBrush}" BorderThickness="1" Background="{DynamicResource BgMainBrush}" CornerRadius="6" ClipToBounds="True">
+                        <Canvas x:Name="MainCanvas" Grid.Row="1" Margin="10,40,10,10" 
+                                MouseMove="MainCanvas_MouseMove" 
+                                MouseLeave="MainCanvas_MouseLeave" 
+                                MouseLeftButtonDown="MainCanvas_MouseLeftButtonDown"
+                                MouseLeftButtonUp="MainCanvas_MouseLeftButtonUp"
+                                Background="Transparent">
+
+                            <Rectangle x:Name="ChartSelectionRect" Fill="#4400E5FF" Visibility="Hidden" IsHitTestVisible="False" Panel.ZIndex="50" Height="{Binding ActualHeight, ElementName=MainCanvas}"/>
+                            <Border x:Name="SelectionHintPopup" Background="{DynamicResource BgCardBrush}" BorderBrush="{DynamicResource BorderMainBrush}" BorderThickness="1" CornerRadius="4" Padding="8,4" Visibility="Hidden" IsHitTestVisible="False" Panel.ZIndex="101">
+                                <TextBlock Text="松开鼠标查询此范围" Foreground="{DynamicResource TextMainBrush}" FontWeight="Bold"/>
+                            </Border>
+
+                            <TextBlock x:Name="LabelMax" Text="10 MB/s" Foreground="#A0FFFFFF" FontWeight="Bold" Canvas.Top="10" Canvas.Left="10" Panel.ZIndex="100"/>
+                            <Polygon x:Name="PolyDown" Fill="#15FF2277" Stroke="#FF2277" StrokeThickness="1.5" />
+                        <Polygon x:Name="PolyUp" Fill="#1500E5FF" Stroke="#00E5FF" StrokeThickness="1.5" />
+                        <Line x:Name="MainHoverLine" Stroke="Gray" StrokeDashArray="2 2" Y1="0" Y2="1000" Visibility="Hidden" IsHitTestVisible="False"/>
+                        <Ellipse x:Name="MainHoverDotDown" Width="8" Height="8" Fill="#FF2277" Stroke="White" Visibility="Hidden" Margin="-4,-4,0,0"/>
+                        <Ellipse x:Name="MainHoverDotUp" Width="8" Height="8" Fill="#00E5FF" Stroke="White" Visibility="Hidden" Margin="-4,-4,0,0"/>
+                        <Border x:Name="MainHoverPopup" Background="{DynamicResource BgCardBrush}" CornerRadius="4" Padding="10" Visibility="Hidden" IsHitTestVisible="False" Panel.ZIndex="100">
+                            <StackPanel>
+                                <TextBlock x:Name="MainHoverTime" Foreground="{DynamicResource TextMainBrush}" FontSize="14" FontWeight="Bold"/>
+                                <TextBlock x:Name="MainHoverDownText" Foreground="#FF2277" FontWeight="Bold"/>
+                                <TextBlock x:Name="MainHoverUpText" Foreground="#00E5FF" FontWeight="Bold"/>
+                            </StackPanel>
+                        </Border>
+                    </Canvas>
+                </Border>
+                <Grid Grid.Row="2" Margin="10,15,10,5">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="40"/>
+                        <ColumnDefinition Width="1"/>
+                        <ColumnDefinition Width="40"/>
+                        <ColumnDefinition Width="300"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="0,0,10,0">
+                        <TextBlock x:Name="TxtWinDownTotal" Text="0 B" Foreground="{DynamicResource TextMainBrush}" FontSize="20" FontWeight="Bold" HorizontalAlignment="Right"/>
+                        <TextBlock x:Name="TxtWinDownSpeed" Text="0 B/s" Foreground="{DynamicResource TextDimBrush}" FontSize="12" HorizontalAlignment="Right" Margin="0,2,0,0"/>
+                    </StackPanel>
+                    <Path x:Name="ArrowWinDown" Grid.Column="1" Data="M 0,0 L 5,5 L 10,0" Stroke="#FF2277" StrokeThickness="2.5" VerticalAlignment="Center" HorizontalAlignment="Right" Margin="0,0,-22,18"/>
+
+                    <Canvas Grid.Column="2" Width="140" Height="70" VerticalAlignment="Bottom" Margin="15,0">
+                        <Path Stroke="#333" StrokeThickness="8" StrokeEndLineCap="Round" StrokeStartLineCap="Round" Data="M 20,65 A 50,50 0 0 1 120,65"/>
+                        <Path x:Name="PathWinDown" Stroke="#FF2277" StrokeThickness="8" StrokeEndLineCap="Round" StrokeStartLineCap="Round"/>
+                        <Path x:Name="PathWinUp" Stroke="#00E5FF" StrokeThickness="8" StrokeEndLineCap="Round" StrokeStartLineCap="Round"/>
+
+                        <StackPanel Canvas.Left="0" Canvas.Top="32" Width="140" HorizontalAlignment="Center">
+                            <Path Data="M 5,10 a 5,5 0 1,1 10,0 a 5,5 0 1,1 -10,0 M 10,2 L 10,5 M 10,15 L 10,18 M 2,10 L 5,10 M 15,10 L 18,10" Stroke="Gray" Stretch="Uniform" Width="14" Height="14" Margin="0,0,0,2"/>
+                            <TextBlock x:Name="TxtWinTotal" Text="0 B" Foreground="{DynamicResource TextMainBrush}" FontSize="16" FontWeight="Bold" HorizontalAlignment="Center"/>
+                        </StackPanel>
+                    </Canvas>
+
+                    <Path x:Name="ArrowWinUp" Grid.Column="3" Data="M 0,5 L 5,0 L 10,5" Stroke="#00E5FF" StrokeThickness="2.5" VerticalAlignment="Center" HorizontalAlignment="Left" Margin="-22,18,0,0"/>
+                    <StackPanel Grid.Column="3" VerticalAlignment="Center" Margin="10,0,0,0">
+                        <TextBlock x:Name="TxtWinUpTotal" Text="0 B" Foreground="{DynamicResource TextMainBrush}" FontSize="20" FontWeight="Bold" HorizontalAlignment="Left"/>
+                        <TextBlock x:Name="TxtWinUpSpeed" Text="0 B/s" Foreground="{DynamicResource TextDimBrush}" FontSize="12" HorizontalAlignment="Left" Margin="0,2,0,0"/>
+                    </StackPanel>
+
+                    <Rectangle Grid.Column="5" Fill="#333" Width="1" Height="50" VerticalAlignment="Center"/>
+
+                    <StackPanel Grid.Column="7" VerticalAlignment="Center" Margin="0,0,0,0">
+                        <Grid Margin="0,0,0,12">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="40"/>
+                                <ColumnDefinition Width="70"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="WAN" Foreground="{DynamicResource TextDimBrush}" VerticalAlignment="Center" FontWeight="Bold"/>
+                            <TextBlock x:Name="TxtWanTotal" Grid.Column="1" Text="0 B" Foreground="{DynamicResource TextMainBrush}" FontWeight="Bold" VerticalAlignment="Center"/>
+                            <Border Grid.Column="2" Height="6" Background="#333" CornerRadius="3" ClipToBounds="True">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition x:Name="ColWanDown" Width="0*"/>
+                                        <ColumnDefinition x:Name="ColWanUp" Width="0*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <Rectangle x:Name="RectWanDown" Fill="#FF2277" Grid.Column="0"/>
+                                    <Rectangle x:Name="RectWanUp" Fill="#00E5FF" Grid.Column="1"/>
+                                </Grid>
+                            </Border>
+                        </Grid>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="40"/>
+                                <ColumnDefinition Width="70"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="LAN" Foreground="{DynamicResource TextDimBrush}" VerticalAlignment="Center" FontWeight="Bold"/>
+                            <TextBlock x:Name="TxtLanTotal" Grid.Column="1" Text="0 B" Foreground="{DynamicResource TextMainBrush}" FontWeight="Bold" VerticalAlignment="Center"/>
+                            <Border Grid.Column="2" Height="6" Background="#333" CornerRadius="3" ClipToBounds="True">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition x:Name="ColLanDown" Width="0*"/>
+                                        <ColumnDefinition x:Name="ColLanUp" Width="0*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <Rectangle x:Name="RectLanDown" Fill="#FF2277" Grid.Column="0"/>
+                                    <Rectangle x:Name="RectLanUp" Fill="#00E5FF" Grid.Column="1"/>
+                                </Grid>
+                            </Border>
+                        </Grid>
+                    </StackPanel>
+                </Grid>
+
+                    <Button Grid.Row="3" x:Name="BtnToggleProcess" Content="▼ 展开进程详情" Margin="0,15,0,0" Padding="5" Background="{DynamicResource BgInputBrush}" Foreground="{DynamicResource TextDimBrush}" Click="BtnToggleProcess_Click"/>
+                    <TextBlock x:Name="TxtTrafficLoading" Grid.Row="4" Text="⏳ 正在聚合历史切片数据，请稍候..." Visibility="Collapsed" Foreground="{DynamicResource TextDimBrush}" HorizontalAlignment="Center" Margin="0,40,0,0" Panel.ZIndex="10"/>
+                    <DataGrid Grid.Row="4" x:Name="ProcessGrid" AutoGenerateColumns="False" Margin="0,10,0,0" Background="{DynamicResource BgMainBrush}" RowBackground="{DynamicResource BgNavBrush}" Foreground="{DynamicResource TextDimBrush}" HeadersVisibility="Column" RowDetailsVisibilityMode="VisibleWhenSelected" PreviewMouseWheel="InnerDataGrid_PreviewMouseWheel">
+                        <DataGrid.Columns>
+
+                            <DataGridTextColumn Header="进程名称" Binding="{Binding DisplayName, Mode=OneWay}" Width="200" FontWeight="Bold">
+                                <DataGridTextColumn.ElementStyle>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="ToolTip" Value="{Binding ToolTipText, Mode=OneWay}"/>
+                                    </Style>
+                                </DataGridTextColumn.ElementStyle>
+                            </DataGridTextColumn>
+                            <DataGridTextColumn Header="▼ 下载总量" Binding="{Binding DownloadDisplay}" SortMemberPath="RawDownload" Width="120" Foreground="#FF2277"/>
+                        <DataGridTextColumn Header="▲ 上传总量" Binding="{Binding UploadDisplay}" SortMemberPath="RawUpload" Width="120" Foreground="#00E5FF"/>
+                        <DataGridTextColumn Header="IP连接数" Binding="{Binding ConnectionCount}" Width="80"/>
+                        <DataGridTextColumn Header="活动状态" Binding="{Binding State}" Width="*"/>
+                    </DataGrid.Columns>
+
+                        <DataGrid.RowDetailsTemplate>
+
+                            <DataTemplate>
+                                <Border Background="{DynamicResource BgCardBrush}" Padding="15" Margin="5" CornerRadius="8" BorderBrush="{DynamicResource BorderMainBrush}" BorderThickness="1">
+                                    <StackPanel>
+                                        <TextBlock Text="进程详细信息" Foreground="#00E5FF" FontWeight="Bold" Margin="0,0,0,5"/>
+                                        <TextBlock Text="{Binding ToolTipText}" Foreground="{DynamicResource TextDimBrush}" Margin="0,0,0,10"/>
+
+                                        <ToggleButton x:Name="BtnShowIPs" Content="🌐 查看链接 IP" Padding="15,6" HorizontalAlignment="Left" Background="#33FFFFFF" Foreground="White" BorderThickness="0" Cursor="Hand">
+                                            <ToggleButton.Resources>
+                                                <Style TargetType="Border">
+                                                    <Setter Property="CornerRadius" Value="6"/>
+                                                </Style>
+                                            </ToggleButton.Resources>
+                                        </ToggleButton>
+
+                                        <DataGrid ItemsSource="{Binding Connections}" AutoGenerateColumns="False" 
+                                                                  HeadersVisibility="Column" Background="Transparent" RowBackground="Transparent" 
+                                                                  BorderThickness="0" GridLinesVisibility="Horizontal" HorizontalGridLinesBrush="#33ffffff"
+                                                                  Margin="0,15,0,0" PreviewMouseWheel="InnerDataGrid_PreviewMouseWheel">
+                                            <DataGrid.Style>
+                                                <Style TargetType="DataGrid">
+                                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding IsChecked, ElementName=BtnShowIPs}" Value="True">
+                                                            <Setter Property="Visibility" Value="Visible"/>
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </DataGrid.Style>
+
+                                            <DataGrid.Columns>
+                                                <DataGridTextColumn Header="地区" Binding="{Binding FlagAndRegion}" Width="100" IsReadOnly="True" Foreground="White"/>
+                                                <DataGridTextColumn Header="远程 IP" Binding="{Binding IP}" Width="150" IsReadOnly="True" Foreground="#00E5FF"/>
+                                                <DataGridTextColumn Header="选区下载量" Binding="{Binding DownloadDisplay}" Width="110" IsReadOnly="True" Foreground="#ff3d71"/>
+                                                <DataGridTextColumn Header="选区上传量" Binding="{Binding UploadDisplay}" Width="110" IsReadOnly="True" Foreground="#00E5FF"/>
+                                                <DataGridTemplateColumn Header="操作" Width="100">
+                                                    <DataGridTemplateColumn.CellTemplate>
+                                                        <DataTemplate>
+                                                            <Button Content="🌍 3D 追踪" 
+                    Tag="{Binding IP}" 
+                    Click="BtnTraceIP_Click"
+                    Background="{DynamicResource BgInputBrush}" 
+                    Foreground="{DynamicResource TextMainBrush}" 
+                    BorderBrush="{DynamicResource BorderMainBrush}" 
+                    BorderThickness="1"
+                    Cursor="Hand" 
+                    Padding="5,2" 
+                    Margin="2"/>
+                                                        </DataTemplate>
+                                                    </DataGridTemplateColumn.CellTemplate>
+                                                </DataGridTemplateColumn>
+                                            </DataGrid.Columns>
+
+                                            <DataGrid.RowDetailsTemplate>
+
+                                                <DataTemplate>
+                                                    <StackPanel Margin="30,5,0,10">
+                                                        <TextBlock Text="共用该 IP 的其他进程:" Foreground="#8BC34A" FontSize="11" Margin="0,0,0,5"/>
+                                                        <ItemsControl ItemsSource="{Binding AssociatedProcesses}">
+                                                            <ItemsControl.ItemTemplate>
+                                                                <DataTemplate>
+                                                                    <TextBlock Text="{Binding}" Foreground="{DynamicResource TextDimBrush}" FontSize="11" Margin="0,2"/>
+                                                                </DataTemplate>
+                                                            </ItemsControl.ItemTemplate>
+                                                        </ItemsControl>
+                                                    </StackPanel>
+                                                </DataTemplate>
+                                            </DataGrid.RowDetailsTemplate>
+                                        </DataGrid>
+                                    </StackPanel>
+                                </Border>
+                            </DataTemplate>
+                        </DataGrid.RowDetailsTemplate>
+                    </DataGrid>
+            </Grid>
+            </ScrollViewer>
+            <Grid x:Name="ViewSystem" Visibility="Collapsed">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="0,0,15,0">
+                    <Grid Margin="0,0,0,10">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="200"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="300"/>
+                        </Grid.RowDefinitions>
+                        <Border Grid.Row="0" Background="{DynamicResource BgMainBrush}" BorderBrush="{DynamicResource BorderMainBrush}" BorderThickness="1" CornerRadius="6" Padding="15">
+                    <StackPanel>
+                        <Grid Margin="0,0,0,10">
+                            <TextBlock Text="流量使用热力图 (Traffic Contributions)" Foreground="{DynamicResource TextMainBrush}" FontWeight="Bold"/>
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                                <Button Content="◀" Foreground="{DynamicResource TextDimBrush}" Background="Transparent" Click="BtnPrevYear_Click" BorderThickness="0"/>
+                                <TextBlock x:Name="HeatmapYearText" Text="2024" Foreground="{DynamicResource TextMainBrush}" FontWeight="Bold" Margin="10,0" VerticalAlignment="Center"/>
+                                <Button Content="▶" Foreground="{DynamicResource TextDimBrush}" Background="Transparent" Click="BtnNextYear_Click" BorderThickness="0"/>
+                            </StackPanel>
+                        </Grid>
+                        <Canvas x:Name="HeatmapCanvas" Height="140" Background="Transparent"/>
+                    </StackPanel>
+                </Border>
+                <Grid Grid.Row="1" Margin="0,15">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="15"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="15"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+
+                    <Border Grid.Column="0" Background="{DynamicResource BgMainBrush}" BorderBrush="#FF2277" BorderThickness="3,0,0,0" Padding="15">
+                        <StackPanel>
+                            <TextBlock Text="今日流量" Foreground="{DynamicResource TextDimBrush}"/>
+                            <TextBlock x:Name="TxtToday" Text="0.00 GB" Foreground="{DynamicResource TextMainBrush}" FontSize="26" FontWeight="Bold"/>
+                            <TextBlock x:Name="TxtTodayVpn" Text="VPN: 0 B" Foreground="#FF9800" FontSize="11" FontWeight="Bold" Margin="0,2,0,0"/>
+                        </StackPanel>
+                    </Border>
+                    <Border Grid.Column="2" Background="{DynamicResource BgMainBrush}" BorderBrush="#4285F4" BorderThickness="3,0,0,0" Padding="15">
+                        <StackPanel>
+                            <TextBlock Text="本周流量" Foreground="{DynamicResource TextDimBrush}"/>
+                            <TextBlock x:Name="TxtWeek" Text="0.00 GB" Foreground="{DynamicResource TextMainBrush}" FontSize="26" FontWeight="Bold"/>
+                            <TextBlock x:Name="TxtWeekVpn" Text="VPN: 0 B" Foreground="#FF9800" FontSize="11" FontWeight="Bold" Margin="0,2,0,0"/>
+                        </StackPanel>
+                    </Border>
+                    <Border Grid.Column="4" Background="{DynamicResource BgMainBrush}" BorderBrush="#A142F4" BorderThickness="3,0,0,0" Padding="15">
+                        <StackPanel>
+                            <TextBlock Text="本月流量" Foreground="{DynamicResource TextDimBrush}"/>
+                            <TextBlock x:Name="TxtMonth" Text="0.00 GB" Foreground="{DynamicResource TextMainBrush}" FontSize="26" FontWeight="Bold"/>
+                            <TextBlock x:Name="TxtMonthVpn" Text="VPN: 0 B" Foreground="#FF9800" FontSize="11" FontWeight="Bold" Margin="0,2,0,0"/>
+                        </StackPanel>
+                    </Border>
+
+                </Grid>
+                <Border Grid.Row="2" Background="{DynamicResource BgMainBrush}" BorderBrush="{DynamicResource BorderMainBrush}" BorderThickness="1" CornerRadius="6" Padding="15">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="*"/>
+                        </Grid.RowDefinitions>
+                        <TextBlock Text="近30日总流量趋势" Foreground="{DynamicResource TextMainBrush}" FontWeight="Bold" Margin="0,0,0,10"/>
+                        <Canvas Grid.Row="1" x:Name="BarChartCanvas" SizeChanged="BarChartCanvas_SizeChanged"/>
+                    </Grid>
+                </Border>
+
+                <Border x:Name="HeatmapPopup" Background="#ea18181e" BorderBrush="#4285F4" BorderThickness="1" CornerRadius="6" Padding="15" Visibility="Collapsed" HorizontalAlignment="Center" VerticalAlignment="Center" Panel.ZIndex="100">
+                    <StackPanel>
+                        <Grid Margin="0,0,0,10">
+                            <TextBlock x:Name="HeatmapPopupDate" Foreground="{DynamicResource TextMainBrush}" FontWeight="Bold"/>
+                            <Button Content="✖" Foreground="{DynamicResource TextDimBrush}" Background="Transparent" HorizontalAlignment="Right" Click="CloseHeatmapPopup_Click" BorderThickness="0"/>
+                        </Grid>
+                        <ItemsControl x:Name="HeatmapPopupList" MaxHeight="200">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Grid Margin="0,2">
+                                        <TextBlock Text="{Binding Key}" Foreground="{DynamicResource TextDimBrush}"/>
+                                        <TextBlock Text="{Binding Value}" Foreground="#00E5FF" HorizontalAlignment="Right" Margin="50,0,0,0"/>
+                                    </Grid>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+                        </Border>
+                    </Grid>
+                </ScrollViewer>
+            </Grid>
+
+            <Grid x:Name="ViewResources" Visibility="Collapsed">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="0,0,15,0">
+                    <Grid Margin="0,0,0,10">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="200"/>
+                            <RowDefinition Height="250"/>
+                            <RowDefinition Height="15"/>
+                            <RowDefinition Height="350"/>
+                        </Grid.RowDefinitions>
+                        <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="15"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+
+                <Border Grid.Row="0" Grid.ColumnSpan="3" Background="{DynamicResource BgNavBrush}" Margin="0,0,0,10" CornerRadius="6" Padding="15" BorderBrush="{DynamicResource BorderMainBrush}" BorderThickness="1">
+                    <StackPanel>
+                        <Grid Margin="0,0,0,5">
+                            <TextBlock x:Name="ResourceHeatmapTitle" Text="资源活跃历史 (Historical Contributions) - 点击砖块查看历史详情" Foreground="{DynamicResource TextMainBrush}" FontWeight="Bold"/>
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                                <StackPanel x:Name="HistoryTimePanel" Orientation="Horizontal" Visibility="Collapsed" Margin="0,0,15,0">
+                                    <TextBlock Text="⏱️ 范围: " Foreground="{DynamicResource TextDimBrush}" VerticalAlignment="Center" Margin="0,0,5,0"/>
+                                    <TextBox x:Name="TxtHistoryStart" Width="70" Text="00:00:00" Background="{DynamicResource BgInputBrush}" Foreground="{DynamicResource TextMainBrush}" BorderThickness="0" Padding="5,2" VerticalContentAlignment="Center"/>
+                                    <TextBlock Text=" ~ " Foreground="{DynamicResource TextDimBrush}" VerticalAlignment="Center" Margin="5,0"/>
+                                    <TextBox x:Name="TxtHistoryEnd" Width="70" Text="23:59:59" Background="{DynamicResource BgInputBrush}" Foreground="{DynamicResource TextMainBrush}" BorderThickness="0" Padding="5,2" VerticalContentAlignment="Center"/>
+                                    <Button Content="筛选" Margin="5,0,0,0" Padding="10,2" Background="#00E5FF" Foreground="#121216" FontWeight="Bold" BorderThickness="0" Cursor="Hand" Click="BtnApplyTimeFilter_Click"/>
+                                </StackPanel>
+
+                                <Button x:Name="BtnBackToLive" Content="🔙 返回实时监控" Visibility="Collapsed" Foreground="#00E5FF" Background="Transparent" Click="BtnBackToLive_Click" BorderThickness="0" Margin="0,0,10,0"/>
+                                <Button Content="◀" Foreground="{DynamicResource TextDimBrush}" Background="Transparent" Click="BtnResPrevYear_Click" BorderThickness="0"/>
+                                <TextBlock x:Name="ResHeatmapYearText" Text="2024" Foreground="{DynamicResource TextMainBrush}" Margin="10,0" VerticalAlignment="Center"/>
+                                <Button Content="▶" Foreground="{DynamicResource TextDimBrush}" Background="Transparent" Click="BtnResNextYear_Click" BorderThickness="0"/>
+                            </StackPanel>
+                        </Grid>
+                        <Canvas x:Name="ResourceHeatmapCanvas" Height="140" Background="Transparent"/>
+                    </StackPanel>
+                </Border>
+
+
+                        <Border Grid.Row="1" Grid.Column="0" Background="{DynamicResource BgMainBrush}" BorderBrush="{DynamicResource BorderMainBrush}" BorderThickness="1" CornerRadius="6" Padding="15">
+                            <Grid>
+                                <WrapPanel Orientation="Horizontal" Panel.ZIndex="10" IsHitTestVisible="False">
+                                    <TextBlock Text="系统资源分配 (%)" Foreground="{DynamicResource TextMainBrush}" FontWeight="Bold" Margin="0,0,15,0" />
+                                    <TextBlock x:Name="TxtCpu" Text="CPU: 0.0%" Foreground="#ff3d71" FontWeight="Bold" Margin="0,0,10,0"/>
+                                    <TextBlock x:Name="TxtRam" Text="RAM: 0.0%" Foreground="#A142F4" FontWeight="Bold" Margin="0,0,10,0"/>
+                                    <TextBlock x:Name="TxtGpu" Text="GPU: 0.0%" Foreground="#FF9800" FontWeight="Bold" Margin="0,0,10,0"/>
+                                    <TextBlock x:Name="TxtDisk" Text="DISK: 0.0%" Foreground="#8BC34A" FontWeight="Bold" Margin="0,0,10,0"/>
+                                    <TextBlock x:Name="TxtBattery" Text="BAT: 100%" Foreground="#4285F4" FontWeight="Bold"/>
+                                </WrapPanel>
+
+                                <Canvas x:Name="ResCanvas" Background="Transparent" ClipToBounds="True" Margin="0,30,0,0" MouseMove="ResCanvas_MouseMove" MouseLeave="ResCanvas_MouseLeave">
+                                    <Polyline x:Name="LineCpu" Stroke="#ff3d71" StrokeThickness="1.5"/>
+                                    <Polyline x:Name="LineRam" Stroke="#A142F4" StrokeThickness="1.5"/>
+                                    <Polyline x:Name="LineGpu" Stroke="#FF9800" StrokeThickness="1.5"/>
+                                    <Polyline x:Name="LineDisk" Stroke="#8BC34A" StrokeThickness="1.5"/>
+                                    <Polyline x:Name="LineBattery" Stroke="#4285F4" StrokeThickness="1.5" StrokeDashArray="2,2"/>
+
+                                    <Line x:Name="ResHoverLine" Stroke="Gray" StrokeDashArray="2 2" Visibility="Hidden" Panel.ZIndex="100"/>
+                                    <Ellipse x:Name="ResHoverDotCpu" Width="8" Height="8" Fill="#ff3d71" Visibility="Hidden" Panel.ZIndex="100" Margin="-4,-4,0,0"/>
+                                    <Ellipse x:Name="ResHoverDotRam" Width="8" Height="8" Fill="#A142F4" Visibility="Hidden" Panel.ZIndex="100" Margin="-4,-4,0,0"/>
+                                    <Ellipse x:Name="ResHoverDotGpu" Width="8" Height="8" Fill="#FF9800" Visibility="Hidden" Panel.ZIndex="100" Margin="-4,-4,0,0"/>
+                                    <Ellipse x:Name="ResHoverDotDisk" Width="8" Height="8" Fill="#8BC34A" Visibility="Hidden" Panel.ZIndex="100" Margin="-4,-4,0,0"/>
+                                    <Ellipse x:Name="ResHoverDotBat" Width="8" Height="8" Fill="#4285F4" Visibility="Hidden" Panel.ZIndex="100" Margin="-4,-4,0,0"/>
+
+                                    <Border x:Name="ResHoverPopup" BorderBrush="{DynamicResource BorderMainBrush}" Background="{DynamicResource BgCardBrush}" CornerRadius="4" Padding="10" Visibility="Hidden" IsHitTestVisible="False" Panel.ZIndex="100">
+                                        <StackPanel>
+                                            <TextBlock x:Name="ResHoverTime" Foreground="{DynamicResource TextMainBrush}" FontWeight="Bold"/>
+                                            <TextBlock x:Name="ResHoverCpuText" Foreground="#ff3d71"/>
+                                            <TextBlock x:Name="ResHoverRamText" Foreground="#A142F4"/>
+                                            <TextBlock x:Name="ResHoverGpuText" Foreground="#FF9800"/>
+                                            <TextBlock x:Name="ResHoverDiskText" Foreground="#8BC34A"/>
+                                            <TextBlock x:Name="ResHoverBatText" Foreground="#4285F4"/>
+                                        </StackPanel>
+                                    </Border>
+                                </Canvas>
+                            </Grid>
+                        </Border>
+                        <Border Grid.Row="1" Grid.Column="2" Background="{DynamicResource BgMainBrush}" BorderBrush="{DynamicResource BorderMainBrush}" BorderThickness="1" CornerRadius="6" Padding="15">
+                            <Grid>
+                                <TextBlock Text="活跃时段分布 (Active Minutes)" Foreground="{DynamicResource TextMainBrush}" FontWeight="Bold"/>
+                                <Canvas x:Name="HourlyChartCanvas" Margin="0,25,0,0" SizeChanged="HourlyChartCanvas_SizeChanged"/>
+                            </Grid>
+                        </Border>
+
+                        <Border Grid.Row="3" Grid.Column="0" Background="{DynamicResource BgMainBrush}" BorderBrush="{DynamicResource BorderMainBrush}" BorderThickness="1" CornerRadius="6" Padding="10">
+                            <Grid>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="*"/>
+                                </Grid.RowDefinitions>
+
+                                <Grid Grid.Row="0" Margin="5,0,0,10">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+
+                                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                        <TextBlock Text="应用占比 (App Distribution)" Foreground="{DynamicResource TextMainBrush}" FontWeight="Bold" VerticalAlignment="Center"/>
+                                        <Button x:Name="BtnToggleDonutMode" Content="当前展示: 按产生流量 🔄" Foreground="#00E5FF" Background="Transparent" BorderThickness="0" Cursor="Hand" Click="BtnToggleDonutMode_Click" Margin="15,0,0,0"/>
+                                    </StackPanel>
+
+                                    <Button Grid.Column="1" x:Name="BtnToggleAppDistView" Content="饼图 / 列表 🔄" Foreground="#00E5FF" Background="Transparent" BorderThickness="0" Cursor="Hand" Click="BtnToggleAppDistView_Click"/>
+                                </Grid>
+
+                                <Grid Grid.Row="1" Margin="0,5,0,0">
+                                    <TextBlock x:Name="TxtDonutLoading" Text="⏳ 正在分析流量数据，请稍候..." Visibility="Visible" Foreground="{DynamicResource TextDimBrush}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                    <Canvas x:Name="DonutCanvas" Background="Transparent"/>
+
+                                    <Border Visibility="{Binding Visibility, ElementName=GridAppDistribution}" BorderThickness="1" BorderBrush="{DynamicResource BorderMainBrush}" CornerRadius="4" ClipToBounds="True" Margin="0,10,0,0">
+                                        <DataGrid x:Name="GridAppDistribution" Visibility="Collapsed" AutoGenerateColumns="False" Background="Transparent" Foreground="{DynamicResource TextMainBrush}" HeadersVisibility="None" RowBackground="Transparent" GridLinesVisibility="Horizontal" HorizontalGridLinesBrush="{DynamicResource BorderMainBrush}" BorderThickness="0" IsReadOnly="True" ScrollViewer.VerticalScrollBarVisibility="Auto">
+                                            <DataGrid.RowStyle>
+                                                <Style TargetType="DataGridRow">
+                                                    <Setter Property="Background" Value="{DynamicResource BgNavBrush}"/>
+                                                    <Style.Triggers>
+                                                        <Trigger Property="IsSelected" Value="True">
+                                                            <Setter Property="Background" Value="{DynamicResource BgInputBrush}"/>
+                                                        </Trigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </DataGrid.RowStyle>
+                                            <DataGrid.CellStyle>
+                                                <Style TargetType="DataGridCell">
+                                                    <Setter Property="Foreground" Value="{DynamicResource TextMainBrush}"/>
+                                                    <Setter Property="Background" Value="Transparent"/>
+                                                    <Setter Property="BorderThickness" Value="0"/>
+                                                    <Setter Property="Template">
+                                                        <Setter.Value>
+                                                            <ControlTemplate TargetType="DataGridCell">
+                                                                <Border Background="{TemplateBinding Background}" BorderThickness="0" Padding="10,5">
+                                                                    <ContentPresenter VerticalAlignment="Center"/>
+                                                                </Border>
+                                                            </ControlTemplate>
+                                                        </Setter.Value>
+                                                    </Setter>
+                                                </Style>
+                                            </DataGrid.CellStyle>
+                                            <DataGrid.Columns>
+                                                <DataGridTextColumn Binding="{Binding Name}" Width="*">
+                                                    <DataGridTextColumn.ElementStyle>
+                                                        <Style TargetType="TextBlock">
+                                                            <Setter Property="ToolTip" Value="{Binding ToolTipText}"/>
+                                                        </Style>
+                                                    </DataGridTextColumn.ElementStyle>
+                                                </DataGridTextColumn>
+                                                <DataGridTemplateColumn Width="110">
+                                                    <DataGridTemplateColumn.CellTemplate>
+                                                        <DataTemplate>
+                                                            <StackPanel Orientation="Horizontal">
+                                                                <TextBlock Text="{Binding ValueDisplay}" Foreground="{DynamicResource TextDimBrush}"/>
+                                                                <TextBlock Text="{Binding StatusDisplay}" Foreground="#00E5FF" FontWeight="Bold" Margin="5,0,0,0"/>
+                                                            </StackPanel>
+                                                        </DataTemplate>
+                                                    </DataGridTemplateColumn.CellTemplate>
+                                                </DataGridTemplateColumn>
+                                            </DataGrid.Columns>
+                                        </DataGrid>
+                                    </Border>
+                                </Grid>
+                            </Grid>
+                        </Border>
+                        <Border Grid.Row="3" Grid.Column="2" Background="{DynamicResource BgMainBrush}" BorderBrush="{DynamicResource BorderMainBrush}" BorderThickness="1" CornerRadius="6" Padding="10">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="*"/>
+                        </Grid.RowDefinitions>
+
+                        <Grid Grid.Row="0" Margin="5,0,0,10">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="窗口追踪 (Window Activity)" Foreground="{DynamicResource TextMainBrush}" FontWeight="Bold" VerticalAlignment="Center"/>
+                            <Button Grid.Column="1" x:Name="BtnToggleWindowView" Content="饼图 / 列表 🔄" Foreground="#00E5FF" Background="Transparent" BorderThickness="0" Cursor="Hand" Click="BtnToggleWindowView_Click"/>
+                        </Grid>
+
+                                <TabControl x:Name="WindowTabControl" Grid.Row="1" Background="Transparent" BorderThickness="0" SelectionChanged="WindowTabControl_SelectionChanged">
+                                    <TabItem x:Name="TabPrimary" Header="鼠标活动窗口">
+                                        <Border BorderThickness="1" BorderBrush="{DynamicResource BorderMainBrush}" CornerRadius="4" ClipToBounds="True" Margin="0,10,0,0">
+                                            <DataGrid x:Name="GridPrimary" AutoGenerateColumns="False" Background="Transparent" Foreground="{DynamicResource TextMainBrush}" HeadersVisibility="None" RowBackground="Transparent" GridLinesVisibility="Horizontal" HorizontalGridLinesBrush="{DynamicResource BorderMainBrush}" BorderThickness="0" IsReadOnly="True">
+                                                <DataGrid.RowStyle>
+                                                    <Style TargetType="DataGridRow">
+                                                        <Setter Property="Background" Value="{DynamicResource BgNavBrush}"/>
+                                                        <Style.Triggers>
+                                                            <Trigger Property="IsSelected" Value="True">
+                                                                <Setter Property="Background" Value="{DynamicResource BgInputBrush}"/>
+                                                            </Trigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </DataGrid.RowStyle>
+                                                <DataGrid.CellStyle>
+                                                    <Style TargetType="DataGridCell">
+                                                        <Setter Property="Foreground" Value="{DynamicResource TextMainBrush}"/>
+                                                        <Setter Property="Background" Value="Transparent"/>
+                                                        <Setter Property="BorderThickness" Value="0"/>
+                                                        <Setter Property="Template">
+                                                            <Setter.Value>
+                                                                <ControlTemplate TargetType="DataGridCell">
+                                                                    <Border Background="{TemplateBinding Background}" BorderThickness="0" Padding="10,5">
+                                                                        <ContentPresenter VerticalAlignment="Center"/>
+                                                                    </Border>
+                                                                </ControlTemplate>
+                                                            </Setter.Value>
+                                                        </Setter>
+                                                    </Style>
+                                                </DataGrid.CellStyle>
+                                                <DataGrid.Columns>
+                                                    <DataGridTextColumn Binding="{Binding Name, Mode=OneWay}" Width="*">
+                                                        <DataGridTextColumn.ElementStyle>
+                                                            <Style TargetType="TextBlock">
+                                                                <Setter Property="ToolTip" Value="{Binding ToolTipText}"/>
+                                                            </Style>
+                                                        </DataGridTextColumn.ElementStyle>
+                                                    </DataGridTextColumn>
+                                                    <DataGridTemplateColumn Width="110">
+                                                        <DataGridTemplateColumn.CellTemplate>
+                                                            <DataTemplate>
+                                                                <StackPanel Orientation="Horizontal">
+                                                                    <TextBlock Text="{Binding TimeDisplay}" Foreground="{DynamicResource TextDimBrush}"/>
+                                                                    <TextBlock Text="{Binding StatusDisplay}" Foreground="#00E5FF" FontWeight="Bold" Margin="5,0,0,0"/>
+                                                                </StackPanel>
+                                                            </DataTemplate>
+                                                        </DataGridTemplateColumn.CellTemplate>
+                                                    </DataGridTemplateColumn>
+                                                </DataGrid.Columns>
+                                            </DataGrid>
+                                        </Border>
+                                    </TabItem>
+
+                                    <TabItem x:Name="TabSecondary" Header="屏幕显示窗口">
+                                        <Border BorderThickness="1" BorderBrush="{DynamicResource BorderMainBrush}" CornerRadius="4" ClipToBounds="True" Margin="0,10,0,0">
+                                            <DataGrid x:Name="GridSecondary" AutoGenerateColumns="False" Background="Transparent" Foreground="{DynamicResource TextMainBrush}" HeadersVisibility="None" RowBackground="Transparent" GridLinesVisibility="Horizontal" HorizontalGridLinesBrush="{DynamicResource BorderMainBrush}" BorderThickness="0" IsReadOnly="True">
+                                                <DataGrid.RowStyle>
+                                                    <Style TargetType="DataGridRow">
+                                                        <Setter Property="Background" Value="{DynamicResource BgNavBrush}"/>
+                                                        <Style.Triggers>
+                                                            <Trigger Property="IsSelected" Value="True">
+                                                                <Setter Property="Background" Value="{DynamicResource BgInputBrush}"/>
+                                                            </Trigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </DataGrid.RowStyle>
+                                                <DataGrid.CellStyle>
+                                                    <Style TargetType="DataGridCell">
+                                                        <Setter Property="Background" Value="Transparent"/>
+                                                        <Setter Property="BorderThickness" Value="0"/>
+                                                        <Setter Property="Template">
+                                                            <Setter.Value>
+                                                                <ControlTemplate TargetType="DataGridCell">
+                                                                    <Border Background="{TemplateBinding Background}" BorderThickness="0" Padding="10,5">
+                                                                        <ContentPresenter VerticalAlignment="Center"/>
+                                                                    </Border>
+                                                                </ControlTemplate>
+                                                            </Setter.Value>
+                                                        </Setter>
+                                                    </Style>
+                                                </DataGrid.CellStyle>
+                                                <DataGrid.Columns>
+                                                    <DataGridTextColumn Binding="{Binding Name, Mode=OneWay}" Width="*">
+                                                        <DataGridTextColumn.ElementStyle>
+                                                            <Style TargetType="TextBlock">
+                                                                <Setter Property="ToolTip" Value="{Binding ToolTipText}"/>
+                                                            </Style>
+                                                        </DataGridTextColumn.ElementStyle>
+                                                    </DataGridTextColumn>
+                                                    <DataGridTemplateColumn Width="95">
+                                                        <DataGridTemplateColumn.CellTemplate>
+                                                            <DataTemplate>
+                                                                <StackPanel Orientation="Horizontal">
+                                                                    <TextBlock Text="{Binding TimeDisplay}" Foreground="{DynamicResource TextDimBrush}"/>
+                                                                    <TextBlock Text="{Binding StatusDisplay}" Foreground="#00E5FF" FontWeight="Bold" Margin="5,0,0,0"/>
+                                                                </StackPanel>
+                                                            </DataTemplate>
+                                                        </DataGridTemplateColumn.CellTemplate>
+                                                    </DataGridTemplateColumn>
+                                                </DataGrid.Columns>
+                                            </DataGrid>
+                                        </Border>
+                                    </TabItem>
+
+                                    <TabItem x:Name="TabBackground" Header="后台(不显示窗口)">
+                                        <Border BorderThickness="1" BorderBrush="{DynamicResource BorderMainBrush}" CornerRadius="4" ClipToBounds="True" Margin="0,10,0,0">
+                                            <DataGrid x:Name="GridBackground" AutoGenerateColumns="False" Background="Transparent" Foreground="{DynamicResource TextMainBrush}" HeadersVisibility="None" RowBackground="Transparent" GridLinesVisibility="Horizontal" HorizontalGridLinesBrush="{DynamicResource BorderMainBrush}" BorderThickness="0" IsReadOnly="True">
+                                                <DataGrid.RowStyle>
+                                                    <Style TargetType="DataGridRow">
+                                                        <Setter Property="Background" Value="{DynamicResource BgNavBrush}"/>
+                                                        <Style.Triggers>
+                                                            <Trigger Property="IsSelected" Value="True">
+                                                                <Setter Property="Background" Value="{DynamicResource BgInputBrush}"/>
+                                                            </Trigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </DataGrid.RowStyle>
+                                                <DataGrid.CellStyle>
+                                                    <Style TargetType="DataGridCell">
+                                                        <Setter Property="Background" Value="Transparent"/>
+                                                        <Setter Property="BorderThickness" Value="0"/>
+                                                        <Setter Property="Template">
+                                                            <Setter.Value>
+                                                                <ControlTemplate TargetType="DataGridCell">
+                                                                    <Border Background="{TemplateBinding Background}" BorderThickness="0" Padding="10,5">
+                                                                        <ContentPresenter VerticalAlignment="Center"/>
+                                                                    </Border>
+                                                                </ControlTemplate>
+                                                            </Setter.Value>
+                                                        </Setter>
+                                                    </Style>
+                                                </DataGrid.CellStyle>
+                                                <DataGrid.Columns>
+                                                    <DataGridTextColumn Binding="{Binding Name, Mode=OneWay}" Width="*">
+                                                        <DataGridTextColumn.ElementStyle>
+                                                            <Style TargetType="TextBlock">
+                                                                <Setter Property="ToolTip" Value="{Binding ToolTipText}"/>
+                                                            </Style>
+                                                        </DataGridTextColumn.ElementStyle>
+                                                    </DataGridTextColumn>
+                                                    <DataGridTemplateColumn Width="95">
+                                                        <DataGridTemplateColumn.CellTemplate>
+                                                            <DataTemplate>
+                                                                <StackPanel Orientation="Horizontal">
+                                                                    <TextBlock Text="{Binding TimeDisplay}" Foreground="{DynamicResource TextDimBrush}"/>
+                                                                    <TextBlock Text="{Binding StatusDisplay}" Foreground="#00E5FF" FontWeight="Bold" Margin="5,0,0,0"/>
+                                                                </StackPanel>
+                                                            </DataTemplate>
+                                                        </DataGridTemplateColumn.CellTemplate>
+                                                    </DataGridTemplateColumn>
+                                                </DataGrid.Columns>
+                                            </DataGrid>
+                                        </Border>
+                                    </TabItem>
+                                </TabControl>
+                                <Canvas x:Name="WindowDonutCanvas" Grid.Row="1" Background="{DynamicResource BgMainBrush}" Margin="0,30,0,0" Visibility="Collapsed" MouseMove="WindowDonutCanvas_MouseMove" MouseLeave="WindowDonutCanvas_MouseLeave"/>
+                    </Grid>
+                        </Border>
+                    </Grid>
+                </ScrollViewer>
+            </Grid>
+            <Grid x:Name="ViewEarth" Visibility="Collapsed" Background="{DynamicResource BgMainBrush}">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="260"/>
+                </Grid.ColumnDefinitions>
+
+                <ScrollViewer Grid.Column="0" VerticalScrollBarVisibility="Auto" Padding="0,0,15,0">
+                    <StackPanel>
+                        <Grid x:Name="EarthContainer" Height="500" Background="Transparent" 
+                              MouseWheel="Earth3D_MouseWheel" 
+                              MouseRightButtonDown="Earth3D_MouseRightButtonDown" MouseRightButtonUp="Earth3D_MouseRightButtonUp" 
+                              MouseLeftButtonDown="Earth3D_MouseLeftButtonDown" MouseLeftButtonUp="Earth3D_MouseLeftButtonUp" 
+                              MouseMove="Earth3D_MouseMove">
+                            <Viewport3D x:Name="EarthViewport">
+                                <Viewport3D.Camera>
+                                    <PerspectiveCamera x:Name="EarthCam" Position="0,0,4.8" LookDirection="0,0,-1" UpDirection="0,1,0" FieldOfView="60"/>
+                                </Viewport3D.Camera>
+                                <ModelVisual3D>
+                                    <ModelVisual3D.Content>
+                                        <DirectionalLight Color="White" Direction="-1,-1,-2"/>
+                                    </ModelVisual3D.Content>
+                                </ModelVisual3D>
+                                <ModelVisual3D>
+                                    <ModelVisual3D.Content>
+                                        <AmbientLight Color="#606060"/>
+                                    </ModelVisual3D.Content>
+                                </ModelVisual3D>
+                                <ModelVisual3D x:Name="EarthModel"/>
+                            </Viewport3D>
+                            <Canvas x:Name="EarthOverlayCanvas" IsHitTestVisible="False"/>
+                        </Grid>
+
+                        <Border Height="400" Background="{DynamicResource BgCardBrush}" BorderBrush="{DynamicResource BorderMainBrush}" BorderThickness="0,1,0,0">
+                            <Grid x:Name="Map2DContainer" ClipToBounds="True" Background="#0A0A0F"
+                                  MouseWheel="Map2D_MouseWheel" MouseLeftButtonDown="Map2D_MouseLeftButtonDown" 
+                                  MouseLeftButtonUp="Map2D_MouseLeftButtonUp" MouseMove="Map2D_MouseMove">
+                                <Grid x:Name="Map2DTransformGroup">
+                                    <Grid.RenderTransform>
+                                        <TransformGroup>
+                                            <ScaleTransform x:Name="Map2DScale" ScaleX="1" ScaleY="1" />
+                                            <TranslateTransform x:Name="Map2DTranslate" X="0" Y="0" />
+                                        </TransformGroup>
+                                    </Grid.RenderTransform>
+                                    <Image x:Name="Map2DBackground" Stretch="Fill" Opacity="0.5"/>
+
+                                    <Grid x:Name="Map2DPatchContainer" IsHitTestVisible="False" Opacity="0.5"/>
+
+                                    <Canvas x:Name="Map2DCanvas" IsHitTestVisible="False" ClipToBounds="True"/>
+                                </Grid>
+                            </Grid>
+                        </Border>
+                    </StackPanel>
+                </ScrollViewer>
+                <Border Grid.Column="1" Background="{DynamicResource BgMainBrush}" BorderBrush="{DynamicResource BorderMainBrush}" BorderThickness="1,0,0,0" Padding="15">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="*"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+                        <TextBlock Text="IP 路由空间追踪" Foreground="{DynamicResource TextMainBrush}" FontSize="16" FontWeight="Bold" Margin="0,0,0,15"/>
+
+                        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+                            <StackPanel x:Name="TraceListPanel"/>
+                        </ScrollViewer>
+
+                        <StackPanel Grid.Row="2" Margin="0,15,0,0">
+                            <TextBlock Text="🌍 视图交互控制" Foreground="{DynamicResource TextDimBrush}" FontWeight="Bold" Margin="0,0,0,10"/>
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                                <TextBlock Text="自转速度" Foreground="{DynamicResource TextDimBrush}" VerticalAlignment="Center" Margin="0,0,10,0"/>
+                                <Slider x:Name="SliderRotationSpeed" Minimum="-2" Maximum="2" Value="0.3" Width="80" VerticalAlignment="Center"/>
+                                <Button Content="默认" Margin="5,0,0,0" Padding="8,2" Background="#333" Foreground="{DynamicResource TextMainBrush}" BorderThickness="0" Cursor="Hand" Click="BtnResetRot_Click"/>
+                                <Button Content="停止" Margin="5,0,0,0" Padding="8,2" Background="#FF3D71" Foreground="{DynamicResource TextMainBrush}" BorderThickness="0" Cursor="Hand" Click="BtnStopRot_Click"/>
+                            </StackPanel>
+                            <Button Content="📂 导入本地地图贴图" Margin="0,0,0,10" Padding="8,5" Background="{DynamicResource BgInputBrush}" Foreground="#00E5FF" BorderThickness="1" BorderBrush="{DynamicResource BorderMainBrush}" Click="BtnImportMap_Click" Cursor="Hand"/>
+                            <CheckBox x:Name="ChkHighResMap" Content="🎨 高清模式" Foreground="{DynamicResource TextDimBrush}" VerticalAlignment="Center" Checked="ChkHighResMap_CheckedChanged" Unchecked="ChkHighResMap_CheckedChanged"/>
+                            <TextBlock Text=" 极限宽度:" Foreground="{DynamicResource TextDimBrush}" VerticalAlignment="Center" Margin="10,0,5,0"/>
+                            <TextBox x:Name="TxtMaxRes" Text="8192" Width="60" Height="20" 
+             Background="{DynamicResource BgInputBrush}" 
+             Foreground="{DynamicResource TextMainBrush}" 
+             BorderThickness="1" BorderBrush="{DynamicResource BorderMainBrush}"
+             VerticalContentAlignment="Center" HorizontalContentAlignment="Center"
+             TextChanged="TxtMaxRes_TextChanged"/>
+                            <TextBlock Text=" px" Foreground="{DynamicResource TextDimBrush}" VerticalAlignment="Center"/>
+                            <TextBlock Text=" 操作指南:" Foreground="{DynamicResource TextDimBrush}" FontSize="11" VerticalAlignment="Center" Margin="15,0,0,0"/>
+                            <TextBlock Text=" 滚轮缩放 / 拖拽平移 / 勾选高清模式享受无限细节" Foreground="#666" FontSize="11" VerticalAlignment="Center"/>
+                        </StackPanel>
+
+                        <Button Grid.Row="3" Content="退出追踪模式" Padding="10" Background="#FF2277" Foreground="{DynamicResource TextMainBrush}" FontWeight="Bold" Margin="0,15,0,0" Click="BtnCloseEarth_Click" BorderThickness="0" Cursor="Hand"/>
+                    </Grid>
+                </Border>
+            </Grid>
+            <Grid x:Name="ViewLauncher" Visibility="Collapsed">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+
+                <Border Grid.Row="0" Background="{DynamicResource BgMainBrush}" BorderBrush="{DynamicResource BorderMainBrush}" BorderThickness="1" CornerRadius="6" Padding="20" Margin="0,0,0,15">
+                    <StackPanel>
+                        <TextBlock Text="🚀 应用时光机 (Time Machine)" Foreground="{DynamicResource TextMainBrush}" FontSize="20" FontWeight="Bold" Margin="0,0,0,10"/>
+                        <TextBlock Text="点击时间快捷键，或输入具体时刻，主屏幕将瞬间回到过去，展示您当时正在使用的软件工作流组合。" Foreground="{DynamicResource TextDimBrush}" Margin="0,0,0,15"/>
+
+                        <WrapPanel Margin="0,0,0,15" VerticalAlignment="Center">
+                            <Button Content="Now" Tag="0" Padding="15,6" Margin="0,0,10,10" Click="BtnAdjustTime_Click" Background="{DynamicResource BgNavBrush}" Foreground="{DynamicResource TextMainBrush}" BorderBrush="#00E5FF" BorderThickness="1"/>
+                            <Button Content="-5分钟" Tag="-5" Padding="12,6" Margin="0,0,10,10" Click="BtnAdjustTime_Click" Background="{DynamicResource BgCardBrush}" Foreground="{DynamicResource TextMainBrush}"/>
+                            <Button Content="-30分钟" Tag="-30" Padding="12,6" Margin="0,0,10,10" Click="BtnAdjustTime_Click" Background="{DynamicResource BgCardBrush}" Foreground="{DynamicResource TextMainBrush}"/>
+                            <Button Content="-1小时" Tag="-60" Padding="12,6" Margin="0,0,10,10" Click="BtnAdjustTime_Click" Background="{DynamicResource BgCardBrush}" Foreground="{DynamicResource TextMainBrush}"/>
+                            <Button Content="-3小时" Tag="-180" Padding="12,6" Margin="0,0,10,10" Click="BtnAdjustTime_Click" Background="{DynamicResource BgCardBrush}" Foreground="{DynamicResource TextMainBrush}"/>
+                            <Button Content="昨日此时" Tag="-1440" Padding="12,6" Margin="0,0,10,10" Click="BtnAdjustTime_Click" Background="{DynamicResource BgCardBrush}" Foreground="{DynamicResource TextMainBrush}"/>
+                        </WrapPanel>
+
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <TextBlock Text="精准定位: " Foreground="{DynamicResource TextDimBrush}" VerticalAlignment="Center" Margin="0,0,10,0"/>
+                            <DatePicker x:Name="DatePickerSnapshot" Width="130" Background="{DynamicResource BgInputBrush}" Foreground="{DynamicResource TextMainBrush}" BorderThickness="0" VerticalContentAlignment="Center"/>
+                            <TextBox x:Name="TxtSnapshotTime" Width="85" Text="12:00:00" Background="{DynamicResource BgInputBrush}" Foreground="{DynamicResource TextMainBrush}" Margin="10,0,0,0" Padding="5" VerticalContentAlignment="Center"/>
+                            <Button Content="🔍 生成快照" Click="BtnQuerySnapshot_Click" Margin="15,0,0,0" Padding="20,8" Background="{DynamicResource BgNavBrush}" Foreground="{DynamicResource TextMainBrush}" BorderBrush="#FF2277" BorderThickness="1" FontWeight="Bold" Cursor="Hand"/>
+                            <Button Content="⚡ 一键全部唤醒" Click="BtnLaunchAll_Click" Margin="15,0,0,0" Padding="20,8" Background="{DynamicResource BgNavBrush}" Foreground="{DynamicResource TextMainBrush}" BorderBrush="#00E5FF" BorderThickness="1" FontWeight="Bold" Cursor="Hand"/>
+                        </StackPanel>
+
+                    </StackPanel>
+                </Border>
+
+                <Border Grid.Row="1" Background="{DynamicResource BgMainBrush}" BorderBrush="{DynamicResource BorderMainBrush}" BorderThickness="1" CornerRadius="6" Padding="15">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="*"/>
+                        </Grid.RowDefinitions>
+
+                        <TextBlock x:Name="TxtLauncherListTitle" Text="🕒 软件运行记录" Foreground="{DynamicResource TextMainBrush}" FontSize="16" FontWeight="Bold" Margin="0,0,0,15"/>
+
+                        <DataGrid x:Name="GridAppLogs" Grid.Row="1" AutoGenerateColumns="False" HeadersVisibility="None" Background="Transparent" RowBackground="{DynamicResource BgNavBrush}" IsReadOnly="True" GridLinesVisibility="None" BorderThickness="0" ScrollViewer.VerticalScrollBarVisibility="Auto">
+                            <DataGrid.Columns>
+                                <DataGridTemplateColumn Width="*">
+                                    <DataGridTemplateColumn.CellTemplate>
+                                        <DataTemplate>
+                                            <StackPanel Orientation="Horizontal" Margin="10,8">
+                                                <Image Source="{Binding Icon}" Width="28" Height="28" Margin="0,0,15,0"/>
+                                                <StackPanel>
+                                                    <StackPanel Orientation="Horizontal">
+                                                        <TextBlock Text="{Binding ProcessName}" Foreground="{DynamicResource TextMainBrush}" FontWeight="Bold" FontSize="15" ToolTip="{Binding ToolTipText}"/>
+                                                        <Border Background="{DynamicResource BgCardBrush}" CornerRadius="4" Padding="6,1" Margin="10,0,0,0">
+                                                            <TextBlock Text="{Binding StatusText}" Foreground="{Binding StatusColorBrush}" FontSize="11"/>
+                                                        </Border>
+                                                    </StackPanel>
+                                                    <TextBlock Text="{Binding TimeRange}" Foreground="{DynamicResource TextDimBrush}" FontSize="12" Margin="0,4,0,0"/>
+                                                    <TextBlock Text="{Binding ExePath}" Foreground="#555" FontSize="10" Margin="0,2,0,0" TextTrimming="CharacterEllipsis"/>
+                                                </StackPanel>
+                                            </StackPanel>
+                                        </DataTemplate>
+                                    </DataGridTemplateColumn.CellTemplate>
+                                </DataGridTemplateColumn>
+                                <DataGridTemplateColumn Width="120">
+                                    <DataGridTemplateColumn.CellTemplate>
+                                        <DataTemplate>
+                                            <Button Content="独立唤醒" Tag="{Binding ExePath}" Click="BtnLaunchApp_Click" Background="{DynamicResource BgNavBrush}" Foreground="{DynamicResource TextMainBrush}" BorderThickness="1" BorderBrush="#00E5FF" Padding="12,6" VerticalAlignment="Center" Cursor="Hand"/>
+                                        </DataTemplate>
+                                    </DataGridTemplateColumn.CellTemplate>
+                                </DataGridTemplateColumn>
+                            </DataGrid.Columns>
+                        </DataGrid>
+                    </Grid>
+                </Border>
+            </Grid>
+
+            <Grid x:Name="ViewLog" Visibility="Collapsed">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="260"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+
+                <Border Background="{DynamicResource BgNavBrush}" CornerRadius="6" Padding="0,15,0,15">
+                    <ListBox x:Name="LogCategoryList" Background="Transparent" BorderThickness="0" SelectionChanged="LogCategoryList_SelectionChanged">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <Grid Width="220" Margin="15,8">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="{Binding Name}" Foreground="{Binding ColorBrush}" FontWeight="{Binding FontWeight}" VerticalAlignment="Center"/>
+                                    <TextBlock Grid.Column="1" Text="{Binding CountDisplay}" Foreground="{Binding ColorBrush}" VerticalAlignment="Center"/>
+                                </Grid>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                </Border>
+
+                <Grid Grid.Column="1" Margin="15,0,0,0">
+                    <Border Background="{DynamicResource BgCardBrush}" BorderThickness="1" BorderBrush="{DynamicResource BorderMainBrush}" CornerRadius="6">
+                        <Grid>
+                            <ListBox x:Name="LogListBox" Background="Transparent" BorderThickness="0" ScrollViewer.HorizontalScrollBarVisibility="Disabled" Padding="10" Visibility="Visible">
+                                <ListBox.ItemContainerStyle>
+                                    <Style TargetType="ListBoxItem">
+                                        <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+                                        <Setter Property="Template">
+                                            <Setter.Value>
+                                                <ControlTemplate TargetType="ListBoxItem">
+                                                    <Border x:Name="Bd" Background="Transparent">
+                                                        <ContentPresenter/>
+                                                    </Border>
+                                                    <ControlTemplate.Triggers>
+                                                        <Trigger Property="IsSelected" Value="True">
+                                                            <Setter TargetName="Bd" Property="Background" Value="{DynamicResource BgInputBrush}"/>
+                                                        </Trigger>
+                                                    </ControlTemplate.Triggers>
+                                                </ControlTemplate>
+                                            </Setter.Value>
+                                        </Setter>
+                                    </Style>
+                                </ListBox.ItemContainerStyle>
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate>
+                                        <Border Background="{DynamicResource BgNavBrush}" CornerRadius="6" Padding="15" Margin="0,0,0,8" BorderBrush="{DynamicResource BorderMainBrush}" BorderThickness="1">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                </Grid.ColumnDefinitions>
+                                                <Grid Grid.Column="0" Margin="0,0,15,0">
+                                                    <Ellipse Width="36" Height="36" Fill="{Binding ColorBrush}"/>
+                                                    <TextBlock Text="{Binding IconText}" Foreground="White" FontWeight="Bold" FontSize="11" VerticalAlignment="Center" HorizontalAlignment="Center" IsHitTestVisible="False"/>
+                                                </Grid>
+                                                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                                    <TextBlock Text="{Binding Title}" Foreground="{DynamicResource TextMainBrush}" FontWeight="Bold" FontSize="14"/>
+                                                    <TextBlock Text="{Binding Message}" Foreground="{DynamicResource TextDimBrush}" TextWrapping="Wrap" Margin="0,4,0,0"/>
+                                                </StackPanel>
+                                                <StackPanel Grid.Column="2" VerticalAlignment="Top" HorizontalAlignment="Right" Orientation="Horizontal">
+                                                    <TextBlock Text="{Binding TimeDisplay}" Foreground="{DynamicResource TextDimBrush}"/>
+                                                </StackPanel>
+                                            </Grid>
+                                        </Border>
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+                            </ListBox>
+
+                            <DataGrid x:Name="GridFileLogs" Visibility="Collapsed" AutoGenerateColumns="False" HeadersVisibility="None" Background="Transparent" RowBackground="{DynamicResource BgNavBrush}" IsReadOnly="True" GridLinesVisibility="None" BorderThickness="0" ScrollViewer.VerticalScrollBarVisibility="Auto">
+                                <DataGrid.Columns>
+                                    <DataGridTemplateColumn Width="*">
+                                        <DataGridTemplateColumn.CellTemplate>
+                                            <DataTemplate>
+                                                <StackPanel Orientation="Horizontal" Margin="10,8">
+                                                    <Image Source="{Binding Icon}" Width="26" Height="26" Margin="0,0,15,0"/>
+                                                    <StackPanel>
+                                                        <StackPanel Orientation="Horizontal">
+                                                            <TextBlock Text="{Binding ProcessName}" Foreground="{DynamicResource TextMainBrush}" FontWeight="Bold" FontSize="14" ToolTip="{Binding ToolTipText}"/>
+                                                            <Border Background="{DynamicResource BgCardBrush}"  CornerRadius="4" Padding="6,1" Margin="10,0,0,0">
+                                                                <TextBlock Text="{Binding ActionType}" Foreground="{Binding ActionColorBrush}" FontSize="11" FontWeight="Bold"/>
+                                                            </Border>
+                                                        </StackPanel>
+                                                        <TextBlock Text="{Binding TimeDisplay}" Foreground="{DynamicResource TextDimBrush}" FontSize="12" Margin="0,4,0,0"/>
+                                                        <TextBlock Text="{Binding FilePath}" Foreground="#888" FontSize="11" Margin="0,2,0,0" TextTrimming="CharacterEllipsis" ToolTip="{Binding FilePath}"/>
+                                                    </StackPanel>
+                                                </StackPanel>
+                                            </DataTemplate>
+                                        </DataGridTemplateColumn.CellTemplate>
+                                    </DataGridTemplateColumn>
+                                    <DataGridTemplateColumn Width="110">
+                                        <DataGridTemplateColumn.CellTemplate>
+                                            <DataTemplate>
+                                                <Button Content="📂 定位位置" Tag="{Binding FilePath}" Click="BtnLocateFile_Click" Background="{DynamicResource BgNavBrush}" Foreground="{DynamicResource TextMainBrush}" BorderThickness="1" BorderBrush="#00E5FF" Padding="8,4" VerticalAlignment="Center" Cursor="Hand"/>
+                                            </DataTemplate>
+                                        </DataGridTemplateColumn.CellTemplate>
+                                    </DataGridTemplateColumn>
+                                </DataGrid.Columns>
+                            </DataGrid>
+                        </Grid>
+                    </Border>
+                </Grid>
+            </Grid>
+            <Grid x:Name="ViewScanner" Visibility="Collapsed" Background="{DynamicResource BgMainBrush}">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,15">
+                    <RadioButton x:Name="RadioFilterAll" Content="All 0" IsChecked="True" Foreground="#8BC34A" Background="#228BC34A" Padding="15,6" Margin="0,0,10,0" Click="ScannerFilter_Click" Cursor="Hand">
+                        <RadioButton.Template>
+                            <ControlTemplate TargetType="RadioButton">
+                                <Border Background="{TemplateBinding Background}" CornerRadius="12" BorderThickness="{TemplateBinding BorderThickness}" BorderBrush="{TemplateBinding BorderBrush}">
+                                    <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" Margin="{TemplateBinding Padding}"/>
+                                </Border>
+                                <ControlTemplate.Triggers>
+                                    <Trigger Property="IsChecked" Value="True">
+                                        <Setter Property="BorderThickness" Value="1.5"/>
+                                        <Setter Property="BorderBrush" Value="#8BC34A"/>
+                                        <Setter Property="Background" Value="#448BC34A"/>
+                                    </Trigger>
+                                </ControlTemplate.Triggers>
+                            </ControlTemplate>
+                        </RadioButton.Template>
+                    </RadioButton>
+
+                    <RadioButton x:Name="RadioFilterActive" Content="Active 0" Foreground="{DynamicResource TextMainBrush}" Background="#11888888" BorderBrush="{DynamicResource BorderMainBrush}" BorderThickness="1" Padding="15,6" Margin="0,0,15,0" Click="ScannerFilter_Click" Cursor="Hand">
+                        <RadioButton.Template>
+                            <ControlTemplate TargetType="RadioButton">
+                                <Border x:Name="ActiveBorder" Background="{TemplateBinding Background}" CornerRadius="12" BorderThickness="{TemplateBinding BorderThickness}" BorderBrush="{TemplateBinding BorderBrush}">
+                                    <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" Margin="{TemplateBinding Padding}"/>
+                                </Border>
+                                <ControlTemplate.Triggers>
+                                    <Trigger Property="IsChecked" Value="True">
+                                        <Setter TargetName="ActiveBorder" Property="Background" Value="#33888888"/>
+                                        <Setter TargetName="ActiveBorder" Property="BorderBrush" Value="{DynamicResource TextMainBrush}"/>
+                                        <Setter TargetName="ActiveBorder" Property="BorderThickness" Value="1.5"/>
+                                    </Trigger>
+                                </ControlTemplate.Triggers>
+                            </ControlTemplate>
+                        </RadioButton.Template>
+                    </RadioButton>
+
+                    <Button x:Name="BtnScan" Content="🔄 一键深度扫描" Padding="20,5" Background="#33FFFFFF" BorderThickness="0" Foreground="White" Click="BtnScan_Click" Cursor="Hand" Margin="0,0,10,0">
+                        <Button.Resources>
+                            <Style TargetType="Border">
+                                <Setter Property="CornerRadius" Value="12"/>
+                            </Style>
+                        </Button.Resources>
+                    </Button>
+
+                    <Button x:Name="BtnScannerSettings" Content="⚙️ 设置" Padding="15,5" Background="#33FFFFFF" BorderThickness="0" Foreground="White" Click="BtnScannerSettings_Click" Cursor="Hand">
+                        <Button.Resources>
+                            <Style TargetType="Border">
+                                <Setter Property="CornerRadius" Value="12"/>
+                            </Style>
+                        </Button.Resources>
+                    </Button>
+                </StackPanel>
+
+                <Border Grid.Row="1" x:Name="ScannerSettingsPanel" Visibility="Collapsed" Background="{DynamicResource BgCardBrush}" BorderBrush="{DynamicResource BorderMainBrush}" BorderThickness="1" CornerRadius="6" Padding="20" Margin="0,0,0,15">
+                    <StackPanel>
+                        <TextBlock Text="Network Scanner Settings" Foreground="{DynamicResource TextMainBrush}" FontSize="18" FontWeight="Bold" Margin="0,0,0,15"/>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,15">
+                            <TextBlock Text="Auto-scan the network every" Foreground="{DynamicResource TextDimBrush}" VerticalAlignment="Center"/>
+                            <TextBox x:Name="TxtAutoScanMins" Width="40" Margin="10,0" Background="{DynamicResource BgInputBrush}" Foreground="{DynamicResource TextMainBrush}" BorderThickness="0" TextAlignment="Center" TextChanged="ScannerSettings_Changed"/>
+                            <TextBlock Text="minutes" Foreground="{DynamicResource TextDimBrush}" VerticalAlignment="Center"/>
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="Threads quantity: " Foreground="{DynamicResource TextDimBrush}" Margin="0,0,5,0"/>
+                            <TextBlock x:Name="TxtThreadsValue" Text="32" Foreground="{DynamicResource TextMainBrush}" FontWeight="Bold"/>
+                        </StackPanel>
+                        <TextBlock Text="Fewer threads increase the accuracy of the scan, but take longer to scan." Foreground="#888" FontSize="11" Margin="0,5,0,10"/>
+                        <Slider x:Name="SliderThreads" Minimum="1" Maximum="256" Value="32" Width="300" HorizontalAlignment="Left" Margin="0,0,0,20" ValueChanged="ScannerSettings_Changed"/>
+
+                        <TextBlock Text="Used Protocols:" Foreground="{DynamicResource TextDimBrush}" Margin="0,0,0,10"/>
+                        <WrapPanel>
+                            <CheckBox x:Name="ChkProtoDHCP" Content="DHCP" IsChecked="True" Foreground="{DynamicResource TextMainBrush}" Margin="0,0,20,0" Checked="ScannerSettings_Changed" Unchecked="ScannerSettings_Changed"/>
+                            <CheckBox x:Name="ChkProtoSNMP" Content="SNMP" IsChecked="True" Foreground="{DynamicResource TextMainBrush}" Margin="0,0,20,0" Checked="ScannerSettings_Changed" Unchecked="ScannerSettings_Changed"/>
+                            <CheckBox x:Name="ChkProtoMDNS" Content="MDNS" IsChecked="True" Foreground="{DynamicResource TextMainBrush}" Margin="0,0,20,0" Checked="ScannerSettings_Changed" Unchecked="ScannerSettings_Changed"/>
+                            <CheckBox x:Name="ChkProtoSSDP" Content="SSDP" IsChecked="True" Foreground="{DynamicResource TextMainBrush}" Checked="ScannerSettings_Changed" Unchecked="ScannerSettings_Changed"/>
+                        </WrapPanel>
+                    </StackPanel>
+                </Border>
+
+                <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto" Padding="0,0,15,0">
+                    <ItemsControl x:Name="ScannerInterfacesList">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Border Background="{DynamicResource BgCardBrush}" BorderBrush="{DynamicResource BorderMainBrush}" BorderThickness="1" CornerRadius="6" Margin="0,0,0,15">
+                                    <StackPanel>
+                                        <Grid Background="{DynamicResource BgNavBrush}" Cursor="Hand" PreviewMouseLeftButtonDown="ScannerInterfaceHeader_Click">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="Auto"/>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            <Border Width="24" Height="24" Background="#8BC34A" CornerRadius="4" Margin="0,0,10,0">
+                                                <TextBlock Text="🔌" FontSize="14" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                            </Border>
+                                            <TextBlock Grid.Column="1" Text="{Binding Name}" Foreground="{DynamicResource TextMainBrush}" FontWeight="Bold" FontSize="16" VerticalAlignment="Center"/>
+
+                                            <Button Grid.Column="2" Content="🔄 单独扫描此网卡" Tag="{Binding MAC}" Click="BtnScanSingle_Click" Background="Transparent" Foreground="#8BC34A" BorderThickness="1" BorderBrush="#8BC34A" Padding="8,2" Margin="0,0,15,0" Cursor="Hand"/>
+
+                                            <TextBlock Grid.Column="3" Text="{Binding ScannedTime}" Foreground="{DynamicResource TextDimBrush}" VerticalAlignment="Center" Margin="0,0,15,0"/>
+                                            <TextBlock Grid.Column="4" Text="{Binding ExpandIcon}" Foreground="#00E5FF" FontWeight="Bold" VerticalAlignment="Center"/>
+                                        </Grid>
+                                        <StackPanel Visibility="{Binding ExpandedVisibility}">
+                                            <Grid Margin="0,15,0,10">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="100"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="100"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                </Grid.ColumnDefinitions>
+                                                <Grid.RowDefinitions>
+                                                    <RowDefinition Height="Auto"/>
+                                                    <RowDefinition Height="Auto"/>
+                                                    <RowDefinition Height="Auto"/>
+                                                </Grid.RowDefinitions>
+
+                                                <TextBlock Text="Description:" Foreground="{DynamicResource TextDimBrush}"/>
+                                                <TextBlock Grid.Column="1" Text="{Binding Description}" Foreground="{DynamicResource TextMainBrush}" TextWrapping="Wrap"/>
+
+                                                <TextBlock Grid.Row="1" Text="MAC:" Foreground="{DynamicResource TextDimBrush}" Margin="0,15,0,0"/>
+                                                <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding MAC}" Foreground="{DynamicResource TextMainBrush}" Margin="0,15,0,0"/>
+
+                                                <TextBlock Grid.Row="2" Text="DNS Servers:" Foreground="{DynamicResource TextDimBrush}" Margin="0,15,0,0"/>
+                                                <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding DnsServers}" Foreground="{DynamicResource TextMainBrush}" Margin="0,15,0,0"/>
+
+                                                <TextBlock Grid.Column="2" Text="IP addresses:" Foreground="{DynamicResource TextDimBrush}"/>
+                                                <TextBlock Grid.Column="3" Text="{Binding IPAddresses}" Foreground="{DynamicResource TextMainBrush}"/>
+
+                                                <TextBlock Grid.Row="1" Grid.Column="2" Text="Gateway:" Foreground="{DynamicResource TextDimBrush}" Margin="0,15,0,0"/>
+                                                <TextBlock Grid.Row="1" Grid.Column="3" Text="{Binding Gateway}" Foreground="{DynamicResource TextMainBrush}" Margin="0,15,0,0"/>
+                                            </Grid>
+
+                                            <DataGrid ItemsSource="{Binding Devices}" AutoGenerateColumns="False" HeadersVisibility="Column" Background="Transparent" RowBackground="Transparent" BorderThickness="0" GridLinesVisibility="None" IsReadOnly="True" Margin="0,0,0,15" PreviewMouseWheel="InnerDataGrid_PreviewMouseWheel">
+                                                <DataGrid.RowStyle>
+                                                    <Style TargetType="DataGridRow">
+                                                        <Setter Property="Background" Value="Transparent"/>
+                                                        <Setter Property="Foreground" Value="{DynamicResource TextMainBrush}"/>
+                                                        <Style.Triggers>
+                                                            <Trigger Property="IsSelected" Value="True">
+                                                                <Setter Property="Background" Value="{DynamicResource BgInputBrush}"/>
+                                                            </Trigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </DataGrid.RowStyle>
+                                                <DataGrid.CellStyle>
+                                                    <Style TargetType="DataGridCell">
+                                                        <Setter Property="Foreground" Value="{DynamicResource TextMainBrush}"/>
+                                                        <Setter Property="Background" Value="Transparent"/>
+                                                        <Setter Property="BorderThickness" Value="0"/>
+                                                        <Setter Property="Template">
+                                                            <Setter.Value>
+                                                                <ControlTemplate TargetType="DataGridCell">
+                                                                    <Border Background="{TemplateBinding Background}" BorderThickness="0" Padding="5,0">
+                                                                        <ContentPresenter VerticalAlignment="Center"/>
+                                                                    </Border>
+                                                                </ControlTemplate>
+                                                            </Setter.Value>
+                                                        </Setter>
+                                                    </Style>
+                                                </DataGrid.CellStyle>
+                                                <DataGrid.Columns>
+                                                    <DataGridTemplateColumn Header="Name" Width="220">
+                                                        <DataGridTemplateColumn.CellTemplate>
+                                                            <DataTemplate>
+                                                                <StackPanel Orientation="Horizontal" Margin="15,8">
+                                                                    <Ellipse Width="8" Height="8" Fill="{Binding StatusColor}" Margin="0,0,10,0" VerticalAlignment="Center"/>
+                                                                    <TextBlock Text="{Binding Name}" Foreground="{DynamicResource TextMainBrush}" VerticalAlignment="Center" FontWeight="Bold"/>
+                                                                </StackPanel>
+                                                            </DataTemplate>
+                                                        </DataGridTemplateColumn.CellTemplate>
+                                                    </DataGridTemplateColumn>
+
+                                                    <DataGridTextColumn Header="Description" Binding="{Binding Description}" Width="*">
+                                                        <DataGridTextColumn.ElementStyle>
+                                                            <Style TargetType="TextBlock">
+                                                                <Setter Property="Foreground" Value="{DynamicResource TextDimBrush}"/>
+                                                                <Setter Property="VerticalAlignment" Value="Center"/>
+                                                            </Style>
+                                                        </DataGridTextColumn.ElementStyle>
+                                                    </DataGridTextColumn>
+
+                                                    <DataGridTextColumn Header="IP &amp; MAC address" Binding="{Binding IPMACDisplay}" Width="200">
+                                                        <DataGridTextColumn.ElementStyle>
+                                                            <Style TargetType="TextBlock">
+                                                                <Setter Property="Foreground" Value="{DynamicResource TextMainBrush}"/>
+                                                                <Setter Property="VerticalAlignment" Value="Center"/>
+                                                            </Style>
+                                                        </DataGridTextColumn.ElementStyle>
+                                                    </DataGridTextColumn>
+
+                                                    <DataGridTextColumn Header="Last Seen" Binding="{Binding LastSeen}" Width="150">
+                                                        <DataGridTextColumn.ElementStyle>
+                                                            <Style TargetType="TextBlock">
+                                                                <Setter Property="Foreground" Value="{DynamicResource TextDimBrush}"/>
+                                                                <Setter Property="VerticalAlignment" Value="Center"/>
+                                                            </Style>
+                                                        </DataGridTextColumn.ElementStyle>
+                                                    </DataGridTextColumn>
+                                                </DataGrid.Columns>
+                                                <DataGrid.ColumnHeaderStyle>
+                                                    <Style TargetType="DataGridColumnHeader">
+                                                        <Setter Property="Background" Value="{DynamicResource BgNavBrush}"/>
+                                                        <Setter Property="Foreground" Value="{DynamicResource TextDimBrush}"/>
+                                                        <Setter Property="Padding" Value="15,10,0,10"/>
+                                                        <Setter Property="BorderThickness" Value="0"/>
+                                                    </Style>
+                                                </DataGrid.ColumnHeaderStyle>
+                                            </DataGrid>
+                                        </StackPanel>
+                                    </StackPanel>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </ScrollViewer>
+            </Grid>
+            <Grid x:Name="ViewSettings" Visibility="Collapsed">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <Border Background="{DynamicResource BgMainBrush}" BorderBrush="{DynamicResource BorderMainBrush}" BorderThickness="1" CornerRadius="6" Padding="25" Margin="0,0,0,10">
+                        <StackPanel>
+                            <TextBlock Text="✨ 样式预览 (Preview):" Foreground="{DynamicResource TextDimBrush}" Margin="0,10,0,5"/>
+                        <Border Background="{DynamicResource BgNavBrush}" BorderBrush="{DynamicResource BorderMainBrush}" BorderThickness="1" CornerRadius="4" Padding="15" Margin="0,0,0,15">
+                            <StackPanel x:Name="ThemePreviewArea">
+                                <StackPanel Orientation="Horizontal" Margin="0,0,0,5">
+                                    <TextBlock x:Name="PreviewLabelDown" Text="下载: 1.25 MB/s" FontWeight="Bold" Margin="0,0,20,0"/>
+                                    <TextBlock x:Name="PreviewLabelUp" Text="上传: 450 KB/s" FontWeight="Bold"/>
+                                </StackPanel>
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock x:Name="PreviewLabelCpu" Text="CPU: 15.5%" FontWeight="Bold" Margin="0,0,20,0"/>
+                                    <TextBlock x:Name="PreviewLabelRam" Text="RAM: 42.1%" FontWeight="Bold"/>
+                                </StackPanel>
+                                <TextBlock x:Name="PreviewTextSample" Text="文本预览: System DashBoard 控制面板" Foreground="{DynamicResource TextDimBrush}" Margin="0,10,0,0" FontSize="12" FontStyle="Italic"/>
+                            </StackPanel>
+                        </Border>
+
+                        <TextBlock Text="个性化主题配置" Foreground="{DynamicResource TextMainBrush}" FontSize="20" FontWeight="Bold" Margin="0,0,0,20"/>
+                        <TextBlock Text="3D 路由追踪球体透明度:" Foreground="{DynamicResource TextDimBrush}"/>
+                        <Slider x:Name="SliderEarthOpacity" Minimum="0.2" Maximum="1.0" Value="0.9" Margin="0,5,0,15"/>
+                            <TextBlock Text="全局字体大小:" Foreground="{DynamicResource TextDimBrush}"/>
+                            <Slider x:Name="SliderFontSize" Minimum="10" Maximum="20" Value="14" Margin="0,5,0,15"/>
+
+                            <TextBlock Text="鼠标滚轮滚动速度 (倍率):" Foreground="{DynamicResource TextDimBrush}"/>
+                            <Slider x:Name="SliderScrollSpeed" Minimum="0.2" Maximum="5.0" Value="1.0" Margin="0,5,0,20" IsSnapToTickEnabled="True" TickFrequency="0.1"/>
+                            <TextBlock Text="🎨 预设主题快捷选择:" Foreground="{DynamicResource TextDimBrush}" Margin="0,10,0,5"/>
+                            <StackPanel Margin="0,0,0,20">
+                                <TextBlock Text="🌓 环境氛围 (仅切换深/浅色背景，保留当前线条颜色)" Foreground="{DynamicResource TextDimBrush}" FontSize="12" Margin="0,0,0,10"/>
+                                <WrapPanel>
+                                    <Button Content="Daylight Theme" Tag="#F5F6F8,#FFFFFF" Padding="12,6" Background="{DynamicResource BgCardBrush}" Margin="0,0,10,10" Click="ThemePreset_Click"/>
+                                    <Button Content="Asphalt Theme" Tag="#1e1e24,#2b2b36" Padding="12,6" Background="{DynamicResource BgCardBrush}" Margin="0,0,10,10" Click="ThemePreset_Click"/>
+                                    <Button Content="Night Neon Theme" Tag="#090A0F,#151720" Padding="12,6" Background="{DynamicResource BgCardBrush}" Margin="0,0,10,10" Click="ThemePreset_Click"/>
+                                </WrapPanel>
+                            </StackPanel>
+                            <StackPanel Margin="0,0,0,20">
+                                <TextBlock Text="🌈 监控配色 (仅切换曲线颜色，背景保持不变)" Foreground="{DynamicResource TextDimBrush}" FontSize="12" Margin="0,0,0,10"/>
+                                <WrapPanel>
+                                    <Button Content="Orange &amp; Plum" Tag="#FF8C00,#DDA0DD,#FF4500,#800080" Padding="12,6" Background="{DynamicResource BgCardBrush}" Margin="0,0,10,10" Click="ThemePreset_Click"/>
+                                    <Button Content="Orange &amp; Orchid" Tag="#FF9800,#DA70D6,#FF5722,#9932CC" Padding="12,6" Background="{DynamicResource BgCardBrush}" Margin="0,0,10,10" Click="ThemePreset_Click"/>
+                                    <Button Content="Aqua &amp; Pink" Tag="#00E5FF,#FF69B4,#00BFFF,#FF1493" Padding="12,6" Background="{DynamicResource BgCardBrush}" Margin="0,0,10,10" Click="ThemePreset_Click"/>
+                                    <Button Content="Green &amp; Pink" Tag="#00FA9A,#FF69B4,#32CD32,#FF1493" Padding="12,6" Background="{DynamicResource BgCardBrush}" Margin="0,0,10,10" Click="ThemePreset_Click"/>
+                                    <Button Content="Blue &amp; Peach" Tag="#1E90FF,#FFDAB9,#4169E1,#FFA07A" Padding="12,6" Background="{DynamicResource BgCardBrush}" Margin="0,0,10,10" Click="ThemePreset_Click"/>
+                                    <Button Content="Green &amp; Iris" Tag="#00FF7F,#5A4FCF,#2E8B57,#483D8B" Padding="12,6" Background="{DynamicResource BgCardBrush}" Margin="0,0,10,10" Click="ThemePreset_Click"/>
+                                    <Button Content="Lemon &amp; Lime" Tag="#FFF700,#32CD32,#FFD700,#00FA9A" Padding="12,6" Background="{DynamicResource BgCardBrush}" Margin="0,0,10,10" Click="ThemePreset_Click"/>
+                                    <Button Content="Lilac &amp; Mint" Tag="#C8A2C8,#98FF98,#DDA0DD,#00FF7F" Padding="12,6" Background="{DynamicResource BgCardBrush}" Margin="0,0,10,10" Click="ThemePreset_Click"/>
+                                    <Button Content="Orlok &amp; Ellen" Tag="#8A0303,#D3D3D3,#800000,#A9A9A9" Padding="12,6" Background="{DynamicResource BgCardBrush}" Margin="0,0,10,10" Click="ThemePreset_Click"/>
+                                    <Button Content="Candies &amp; Bubblegum" Tag="#FF1493,#00BFFF,#FF69B4,#00FFFF" Padding="12,6" Background="{DynamicResource BgCardBrush}" Margin="0,0,10,10" Click="ThemePreset_Click"/>
+                                </WrapPanel>
+                            </StackPanel>
+                            <TextBlock Text="资源监控面板组件显示:" Foreground="{DynamicResource TextDimBrush}"/>
+                            <StackPanel Orientation="Horizontal" Margin="0,5,0,20">
+                                <CheckBox x:Name="ChkShowCpu" Content="CPU" Foreground="{DynamicResource TextMainBrush}" Margin="0,0,15,0" IsChecked="True" Checked="ResToggle_Changed" Unchecked="ResToggle_Changed"/>
+                                <CheckBox x:Name="ChkShowRam" Content="RAM" Foreground="{DynamicResource TextMainBrush}" Margin="0,0,15,0" IsChecked="True" Checked="ResToggle_Changed" Unchecked="ResToggle_Changed"/>
+                                <CheckBox x:Name="ChkShowGpu" Content="GPU" Foreground="{DynamicResource TextMainBrush}" Margin="0,0,15,0" IsChecked="False" Checked="ResToggle_Changed" Unchecked="ResToggle_Changed"/>
+                                <CheckBox x:Name="ChkShowDisk" Content="磁盘 (Disk)" Foreground="{DynamicResource TextMainBrush}" Margin="0,0,15,0" IsChecked="False" Checked="ResToggle_Changed" Unchecked="ResToggle_Changed"/>
+                                <CheckBox x:Name="ChkShowBat" Content="电量 (Bat)" Foreground="{DynamicResource TextMainBrush}" IsChecked="False" Checked="ResToggle_Changed" Unchecked="ResToggle_Changed"/>
+                            </StackPanel>
+                            <TextBlock Text="悬停进程解释显示 (Hover Tooltip):" Foreground="{DynamicResource TextDimBrush}"/>
+                            <ComboBox x:Name="ComboTooltipMode" SelectionChanged="Settings_SelectionChanged" Width="220" HorizontalAlignment="Left" Background="{DynamicResource BgInputBrush}" Foreground="{DynamicResource TextMainBrush}" BorderBrush="{DynamicResource BorderMainBrush}" BorderThickness="1" Margin="0,5,0,20">
+                                        <ComboBoxItem Content="不显示解释" Tag="0"/>
+                                <ComboBoxItem Content="仅显示进程名称" Tag="1"/>
+                                <ComboBoxItem Content="显示名称与具体描述" Tag="2"/>
+                            </ComboBox>
+                            <TextBlock Text="进程字典自定义 (支持增加、修改、删除):" Foreground="{DynamicResource TextDimBrush}" Margin="0,15,0,5"/>
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                                <Button Content="📥 导入 JSON" Click="BtnImportDict_Click" Background="{DynamicResource BgInputBrush}" Foreground="{DynamicResource TextMainBrush}" BorderThickness="0" Padding="15,6" Margin="0,0,10,0" Cursor="Hand"/>
+                                <Button Content="📤 导出 JSON" Click="BtnExportDict_Click" Background="{DynamicResource BgInputBrush}" Foreground="{DynamicResource TextMainBrush}" BorderThickness="0" Padding="15,6" Margin="0,0,10,0" Cursor="Hand"/>
+                                <Button Content="🔄 恢复默认" Click="BtnResetDict_Click" Background="#FF3D71" Foreground="White" BorderThickness="0" Padding="15,6" Cursor="Hand"/>
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
+                                <TextBlock Text="关闭主窗口时:" Foreground="{DynamicResource TextMainBrush}" VerticalAlignment="Center" Width="120"/>
+                                <ComboBox x:Name="ComboCloseAction" SelectionChanged="Settings_SelectionChanged" Width="150">
+                                    <ComboBoxItem Content="最小化到系统托盘"/>
+                                    <ComboBoxItem Content="完全退出程序"/>
+                                </ComboBox>
+                            </StackPanel>
+                            <DataGrid x:Name="DictDataGrid" ItemsSource="{Binding DictItemsList, RelativeSource={RelativeSource AncestorType=Window}}" 
+          AutoGenerateColumns="False" Background="{DynamicResource BgCardBrush}" RowBackground="{DynamicResource BgNavBrush}" 
+          BorderThickness="1" BorderBrush="{DynamicResource BorderMainBrush}" HeadersVisibility="Column" 
+          GridLinesVisibility="All" HorizontalGridLinesBrush="{DynamicResource BorderMainBrush}" VerticalGridLinesBrush="{DynamicResource BorderMainBrush}"
+          Height="220" HorizontalAlignment="Left" Width="400" CanUserAddRows="True" CanUserDeleteRows="True" 
+          CellEditEnding="DictDataGrid_CellEditEnding" Margin="0,0,0,30">
+                                <DataGrid.RowStyle>
+                                    <Style TargetType="DataGridRow">
+                                        <Setter Property="Background" Value="Transparent"/>
+                                        <Setter Property="Foreground" Value="{DynamicResource TextMainBrush}"/>
+                                    </Style>
+                                </DataGrid.RowStyle>
+                                <DataGrid.CellStyle>
+                                    <Style TargetType="DataGridCell">
+                                        <Setter Property="Foreground" Value="{DynamicResource TextMainBrush}"/>
+                                        <Setter Property="Background" Value="Transparent"/>
+                                        <Setter Property="BorderThickness" Value="0"/>
+                                        <Setter Property="Template">
+                                            <Setter.Value>
+                                                <ControlTemplate TargetType="DataGridCell">
+                                                    <Border Background="{TemplateBinding Background}" BorderThickness="0" Padding="8,4">
+                                                        <ContentPresenter VerticalAlignment="Center"/>
+                                                    </Border>
+                                                </ControlTemplate>
+                                            </Setter.Value>
+                                        </Setter>
+                                    </Style>
+                                </DataGrid.CellStyle>
+                                <DataGrid.ColumnHeaderStyle>
+                                    <Style TargetType="DataGridColumnHeader">
+                                        <Setter Property="Background" Value="{DynamicResource BgNavBrush}"/>
+                                        <Setter Property="Foreground" Value="{DynamicResource TextDimBrush}"/>
+                                        <Setter Property="Padding" Value="10,6"/>
+                                        <Setter Property="BorderThickness" Value="0,0,1,1"/>
+                                        <Setter Property="BorderBrush" Value="{DynamicResource BorderMainBrush}"/>
+                                    </Style>
+                                </DataGrid.ColumnHeaderStyle>
+                                <DataGrid.Columns>
+                                    <DataGridTextColumn Header="进程名" Binding="{Binding Key, UpdateSourceTrigger=PropertyChanged}" Width="150"/>
+                                    <DataGridTextColumn Header="具体描述" Binding="{Binding Value, UpdateSourceTrigger=PropertyChanged}" Width="*"/>
+                                </DataGrid.Columns>
+                            </DataGrid>
+                            <StackPanel Margin="0,0,0,20">
+                                <TextBlock Text="🛠️ 恢复初始化" Foreground="{DynamicResource TextDimBrush}" FontSize="12" Margin="0,0,0,10"/>
+                                <WrapPanel>
+                                    <Button Content="Classic (全部还原)" Tag="#FF2277,#00E5FF,#ff3d71,#A142F4,#121216,#18181e" Padding="15,8" Background="{DynamicResource BgNavBrush}" BorderBrush="#4285F4" BorderThickness="1" Margin="0,0,10,10" Click="ThemePreset_Click"/>
+                                </WrapPanel>
+                            </StackPanel>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Margin="5">
+                                    <TextBlock Text="下载颜色:" Foreground="{DynamicResource TextDimBrush}"/>
+                                    <DockPanel Margin="0,5">
+                                        <Border x:Name="PreviewBoxDown" Width="20" Height="20" Margin="5" CornerRadius="2"/>
+                                        <TextBox x:Name="EditColorDown" Background="{DynamicResource BgInputBrush}" Foreground="{DynamicResource TextMainBrush}" Padding="5"/>
+                                    </DockPanel>
+                                    <TextBlock Text="CPU 颜色:" Foreground="{DynamicResource TextDimBrush}" Margin="0,10,0,0"/>
+                                    <DockPanel Margin="0,5">
+                                        <Border x:Name="PreviewBoxCpu" Width="20" Height="20" Margin="5" CornerRadius="2"/>
+                                        <TextBox x:Name="EditColorCpu" Background="{DynamicResource BgInputBrush}" Foreground="{DynamicResource TextMainBrush}" Padding="5"/>
+                                    </DockPanel>
+                                </StackPanel>
+                                <StackPanel Grid.Column="1" Margin="5">
+                                    <TextBlock Text="上传颜色:" Foreground="{DynamicResource TextDimBrush}"/>
+                                    <DockPanel Margin="0,5">
+                                        <Border x:Name="PreviewBoxUp" Width="20" Height="20" Margin="5" CornerRadius="2"/>
+                                        <TextBox x:Name="EditColorUp" Background="{DynamicResource BgInputBrush}" Foreground="{DynamicResource TextMainBrush}" Padding="5"/>
+                                    </DockPanel>
+                                    <TextBlock Text="RAM 颜色:" Foreground="{DynamicResource TextDimBrush}" Margin="0,10,0,0"/>
+                                    <DockPanel Margin="0,5">
+                                        <Border x:Name="PreviewBoxRam" Width="20" Height="20" Margin="5" CornerRadius="2"/>
+                                        <TextBox x:Name="EditColorRam" Background="{DynamicResource BgInputBrush}" Foreground="{DynamicResource TextMainBrush}" Padding="5"/>
+                                    </DockPanel>
+                                </StackPanel>
+
+                                <StackPanel Grid.Column="2" Margin="5">
+                                    <TextBlock Text="主背景色 (Main Bg):" Foreground="{DynamicResource TextDimBrush}"/>
+                                    <DockPanel Margin="0,5">
+                                        <Border x:Name="PreviewBoxBgMain" Width="20" Height="20" Margin="5" CornerRadius="2"/>
+                                        <TextBox x:Name="EditColorBgMain" Background="{DynamicResource BgInputBrush}" Foreground="{DynamicResource TextMainBrush}" Padding="5"/>
+                                    </DockPanel>
+                                    <TextBlock Text="面板底色 (Card Bg):" Foreground="{DynamicResource TextDimBrush}" Margin="0,10,0,0"/>
+                                    <DockPanel Margin="0,5">
+                                        <Border x:Name="PreviewBoxBgCard" Width="20" Height="20" Margin="5" CornerRadius="2"/>
+                                        <TextBox x:Name="EditColorBgCard" Background="{DynamicResource BgInputBrush}" Foreground="{DynamicResource TextMainBrush}" Padding="5"/>
+                                    </DockPanel>
+                                </StackPanel>
+                            </Grid>
+
+                            <TextBlock Text="💾 数据管理 (Data Management)" Foreground="{DynamicResource TextMainBrush}" FontSize="20" FontWeight="Bold" Margin="0,35,0,10"/>
+                            <Border Background="{DynamicResource BgNavBrush}" BorderBrush="Transparent" BorderThickness="1" CornerRadius="6" Padding="20" Margin="0,0,0,20">
+                                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                                    <Button Content="📥 导入历史数据" Padding="20,10" Background="{DynamicResource BgCardBrush}" Foreground="{DynamicResource TextMainBrush}" BorderThickness="1" BorderBrush="#00E5FF" Cursor="Hand" Click="BtnImportData_Click" Margin="0,0,20,0"/>
+                                    <Button Content="📤 导出备份数据" Padding="20,10" Background="{DynamicResource BgCardBrush}" Foreground="{DynamicResource TextMainBrush}" BorderThickness="1" BorderBrush="#4285F4" Cursor="Hand" Click="BtnExportData_Click" Margin="0,0,20,0"/>
+                                    <Button Content="🗑️ 清除所有数据" Padding="20,10" Background="{DynamicResource BgCardBrush}" Foreground="{DynamicResource TextMainBrush}" BorderThickness="1" BorderBrush="#FF2277" Cursor="Hand" Click="BtnDeleteData_Click"/>
+                                </StackPanel>
+                            </Border>
+
+                        </StackPanel>
+                    </Border>
+                </ScrollViewer>
+            </Grid>
+        </Grid>
+    </Grid>
+</Window>
