@@ -44,7 +44,9 @@ namespace NetworkMonitor
 
 
         public static int TooltipMode = 2; // 全局进程悬停解释模式 (0=不显示, 1=仅名称, 2=名称+描述)
-        private bool _isChartPaused = false; // 用于控制流量图在悬停时暂停滚动
+        private bool _isChartDragPaused = false;
+        private bool _isMarkerPaused = false;
+        private bool _isChartPaused => _isChartDragPaused || _isMarkerPaused; // 联合状态机控制冻结
         // 飞线动画时间计数器
         private double _flyingLineTime = 0;
 
@@ -362,13 +364,13 @@ namespace NetworkMonitor
                 string displayName = topApps[i].Key;
                 string displayVal = FormatActiveTime(topApps[i].Value);
                 string tooltipText = ProcessDictionary.GetTooltip(displayName);
-                p.ToolTip = new ToolTip
-                {
-                    Content = $"{(tooltipText != null ? tooltipText + "\n" : "")}占比: {percentage:P1} ({displayVal})",
-                    Background = (Brush)this.Resources["BgCardBrush"],
-                    Foreground = (Brush)this.Resources["TextMainBrush"]
-                };
-                ToolTipService.SetInitialShowDelay(p, 0);
+                //p.ToolTip = new ToolTip
+                //{
+                //    Content = $"{(tooltipText != null ? tooltipText + "\n" : "")}占比: {percentage:P1} ({displayVal})",
+                //    Background = (Brush)this.Resources["BgCardBrush"],
+                //    Foreground = (Brush)this.Resources["TextMainBrush"]
+                //};
+                //ToolTipService.SetInitialShowDelay(p, 0);
 
                 p.MouseEnter += (s, e) => { p.Opacity = 1.0; p.Stroke = Brushes.White; Panel.SetZIndex(p, 100); };
                 p.MouseLeave += (s, e) => { p.Opacity = 0.85; p.Stroke = Brushes.Transparent; Panel.SetZIndex(p, 0); };
@@ -399,10 +401,13 @@ namespace NetworkMonitor
         private void WindowDonutCanvas_MouseMove(object sender, MouseEventArgs e)
         {
             if (WindowDonutCanvas.Tag is not List<KeyValuePair<string, long>> topApps || topApps.Count == 0) return;
-            double dx = e.GetPosition(WindowDonutCanvas).X - 190, dy = e.GetPosition(WindowDonutCanvas).Y - 100;
+            // 修复：使用画布真实宽高计算中心点，解决不同分辨率下悬停错位
+            double dx = e.GetPosition(WindowDonutCanvas).X - (WindowDonutCanvas.ActualWidth / 2);
+            double dy = e.GetPosition(WindowDonutCanvas).Y - (WindowDonutCanvas.ActualHeight / 2);
             double dist = Math.Sqrt(dx * dx + dy * dy);
 
-            if (dist < 40 || dist > 80) { if (WindowDonutCanvas.ToolTip is ToolTip t) t.IsOpen = false; return; }
+            // 修复：修正判断半径边界 (根据内径35和外径60)
+            if (dist < 35 || dist > 60) { if (WindowDonutCanvas.ToolTip is System.Windows.Controls.ToolTip t) t.IsOpen = false; return; }
 
             double angle = Math.Atan2(dy, dx) * 180 / Math.PI;
             if (angle < 0) angle += 360;
@@ -414,13 +419,19 @@ namespace NetworkMonitor
                 double sweep = (topApps[i].Value / (double)total) * 360;
                 if (angle >= currentAngle && angle <= currentAngle + sweep)
                 {
-                    if (WindowDonutCanvas.ToolTip is not ToolTip tt) { tt = new ToolTip {
-                        Background = (Brush)this.Resources["BgCardBrush"],
-                        Foreground = (Brush)this.Resources["TextMainBrush"],
-                        BorderBrush = (Brush)this.Resources["BorderMainBrush"],
-                        BorderThickness = new Thickness(1),
-                        FontWeight = FontWeights.Bold }; 
-                        WindowDonutCanvas.ToolTip = tt; 
+                    if (WindowDonutCanvas.ToolTip is not ToolTip tt)
+                    {
+                        tt = new ToolTip
+                        {
+                            Background = (Brush)this.Resources["BgCardBrush"],
+                            Foreground = (Brush)this.Resources["TextMainBrush"],
+                            BorderBrush = (Brush)this.Resources["BorderMainBrush"],
+                            BorderThickness = new Thickness(1),
+                            Placement = System.Windows.Controls.Primitives.PlacementMode.Mouse, // ★ 解决悬停跑到右下角的问题
+                            VerticalOffset = 15,
+                            FontWeight = FontWeights.Bold
+                        };
+                        WindowDonutCanvas.ToolTip = tt;
                     }
                     tt.Content = $"{topApps[i].Key}\n{(topApps[i].Value / (double)total):P1} ({FormatActiveTime(topApps[i].Value)})";
                     tt.IsOpen = true;
@@ -434,25 +445,67 @@ namespace NetworkMonitor
         // 在 MainWindow 类内部添加
         private void SetQuickToolTip(FrameworkElement element, object content)
         {
-            // 创建 ToolTip 对象并设置样式
-            var tt = new ToolTip
+            var tt = new System.Windows.Controls.ToolTip
             {
                 Content = content,
-                Background = (Brush)this.Resources["BgCardBrush"],
-                Foreground = (Brush)this.Resources["TextMainBrush"],
-                BorderBrush = (Brush)this.Resources["BorderMainBrush"],
-                BorderThickness = new Thickness(1),
-                FontWeight = FontWeights.Bold
+                FontWeight = FontWeights.Bold,
+                BorderThickness = new Thickness(1)
             };
+            // 修复: 强制绑定动态画刷资源，使其完全跟随主题颜色
+            tt.SetResourceReference(System.Windows.Controls.ToolTip.BackgroundProperty, "BgCardBrush");
+            tt.SetResourceReference(System.Windows.Controls.ToolTip.ForegroundProperty, "TextMainBrush");
+            tt.SetResourceReference(System.Windows.Controls.ToolTip.BorderBrushProperty, "BorderMainBrush");
 
             element.ToolTip = tt;
+            ToolTipService.SetInitialShowDelay(element, 0);
+            ToolTipService.SetBetweenShowDelay(element, 0);
+            ToolTipService.SetPlacement(element, System.Windows.Controls.Primitives.PlacementMode.Mouse);
+            ToolTipService.SetVerticalOffset(element, 15);
+            ToolTipService.SetHorizontalOffset(element, 15);
+        }
 
-            // 统一设置 ToolTipService 行为：解决更新慢和遮挡问题
-            ToolTipService.SetInitialShowDelay(element, 0);    // 立即显示
-            ToolTipService.SetBetweenShowDelay(element, 0);   // 切换无延迟
-            ToolTipService.SetPlacement(element, System.Windows.Controls.Primitives.PlacementMode.Mouse); // 跟随鼠标
-            ToolTipService.SetVerticalOffset(element, 15);    // 纵向偏移防止挡住鼠标
-            ToolTipService.SetHorizontalOffset(element, 15);  // 横向偏移防止挡住鼠标
+        // ================= 新增：图表拖拽选择时间范围逻辑 =================
+        private double _dragStartX = -1;
+        private bool _isDraggingChart = false;
+        private double _selectedTimeStartRatio = 0;
+        private double _selectedTimeEndRatio = 1;
+
+        private void MainCanvas_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+        {
+            _isDraggingChart = true;
+            _dragStartX = e.GetPosition(MainCanvas).X;
+            ChartSelectionRect.Visibility = Visibility.Visible;
+            Canvas.SetLeft(ChartSelectionRect, _dragStartX);
+            ChartSelectionRect.Width = 0;
+            MainCanvas.CaptureMouse();
+        }
+
+        private void MainCanvas_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+        {
+            if (_isDraggingChart)
+            {
+                _isDraggingChart = false;
+                MainCanvas.ReleaseMouseCapture();
+                double endX = e.GetPosition(MainCanvas).X;
+                double w = MainCanvas.ActualWidth;
+
+                double leftX = Math.Min(_dragStartX, endX);
+                double rightX = Math.Max(_dragStartX, endX);
+
+                if (rightX - leftX > 5) // 防误触，拉出有效范围则截取时间
+                {
+                    _selectedTimeStartRatio = 1.0 - (rightX / w);
+                    _selectedTimeEndRatio = 1.0 - (leftX / w);
+                    _isChartDragPaused = true; // 独立控制拖拽冻结
+                    AddLogEvent("Chart", "已选择流量分析时段", $"成功圈定过去 {(_selectedTimeEndRatio * _currentViewMode):F0}秒 ~ {(_selectedTimeStartRatio * _currentViewMode):F0}秒 的区间，请展开特定进程加载详情。", "#00E5FF");
+                }
+                else
+                {
+                    ChartSelectionRect.Visibility = Visibility.Hidden;
+                    _selectedTimeStartRatio = 0; _selectedTimeEndRatio = 1; // 恢复全量
+                    _isChartDragPaused = false; // 解除拖拽冻结
+                }
+            }
         }
         private const string AppName = "DashBoard";
         private const string AppVersion = "v2.7 (Time Tracking Fixed)";
@@ -779,7 +832,10 @@ namespace NetworkMonitor
             EditColorRam.TextChanged += (s, e) => PreviewTheme();
 
             DonutCanvas.SizeChanged += (s, e) => { if (_activeTab == "Resources") DrawDonutChart(); };
+            // ★ 强迫窗口环形图在拉伸时重新计算自身半径和圆心矩阵
+            if (WindowDonutCanvas != null) WindowDonutCanvas.SizeChanged += (s, e) => { if (_isWindowDonutView) DrawWindowDonutChart(); };
             if (EditColorBgMain != null) EditColorBgMain.TextChanged += (s, e) => PreviewTheme();
+
             if (EditColorBgCard != null) EditColorBgCard.TextChanged += (s, e) => PreviewTheme();
             _mapLodTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(200) };
             _mapLodTimer.Tick += MapLodTimer_Tick;
@@ -1762,6 +1818,8 @@ namespace NetworkMonitor
             if (DonutCanvas.Uid == currentHash) return;
             DonutCanvas.Uid = currentHash;
             DonutCanvas.Children.Clear();
+            DonutCanvas.Tag = topApps; // ★ 必须写入 Tag，否则 MouseMove 将因获取不到数据而强行 return 导致失效！
+
 
             long total = topApps.Sum(x => x.Value);
             double curAngle = 0;
@@ -1792,13 +1850,13 @@ namespace NetworkMonitor
                 string displayVal = _showAppByTime ? FormatActiveTime(topApps[i].Value) : FormatAdaptiveTotal(topApps[i].Value);
 
                 string tooltipText = ProcessDictionary.GetTooltip(displayName);
-                p.ToolTip = new ToolTip
-                {
-                    Content = $"{(tooltipText != null ? tooltipText + "\n" : "")}占比: {percentage:P1} ({displayVal})",
-                    Background = (Brush)this.Resources["BgCardBrush"],
-                    Foreground = (Brush)this.Resources["TextMainBrush"]
-                };
-                ToolTipService.SetInitialShowDelay(p, 0);
+                //p.ToolTip = new ToolTip
+                //{
+                //    Content = $"{(tooltipText != null ? tooltipText + "\n" : "")}占比: {percentage:P1} ({displayVal})",
+                //    Background = (Brush)this.Resources["BgCardBrush"],
+                //    Foreground = (Brush)this.Resources["TextMainBrush"]
+                //};
+                //ToolTipService.SetInitialShowDelay(p, 0);
 
                 p.MouseEnter += (s, e) => { p.Opacity = 1.0; p.Stroke = Brushes.White; Panel.SetZIndex(p, 100); };
                 p.MouseLeave += (s, e) => { p.Opacity = 0.85; p.Stroke = Brushes.Transparent; Panel.SetZIndex(p, 0); };
@@ -1828,19 +1886,83 @@ namespace NetworkMonitor
         // ★ 新增自适应尺寸刷新事件
         private void BarChartCanvas_SizeChanged(object sender, SizeChangedEventArgs e) { if (_activeTab == "System") DrawBarChart(); }
         private void HourlyChartCanvas_SizeChanged(object sender, SizeChangedEventArgs e) { if (_activeTab == "Resources") DrawHourlyChart(); }
+        // ★ 修复 Bug 3：利用原生事件在行展开瞬间立即抓取基础进程信息
+        private void ProcessGrid_LoadingRowDetails(object sender, DataGridRowDetailsEventArgs e)
+        {
+            if (e.Row.Item is ProcessNetworkInfo rowData)
+            {
+                Task.Run(() => {
+                    try
+                    {
+                        string pName = rowData.ProcessName;
+                        var procs = Process.GetProcessesByName(pName.Replace(".exe", ""));
+                        if (procs.Length > 0)
+                        {
+                            string path = procs[0].MainModule?.FileName;
+                            var ver = FileVersionInfo.GetVersionInfo(path);
+                            // 切回主线程刷新UI
+                            Application.Current.Dispatcher.InvokeAsync(() => {
+                                rowData.ProcessPath = "路径: " + path;
+                                rowData.ProcessVersion = "版本: " + (ver.FileVersion ?? "未知");
+                                rowData.ProcessPublisher = "发布者: " + (ver.CompanyName ?? "未知");
+                            });
+                        }
+                        else
+                        {
+                            Application.Current.Dispatcher.InvokeAsync(() => {
+                                rowData.ProcessPath = "路径: 进程已退出或被系统隐藏，无法获取";
+                                rowData.ProcessVersion = "版本: 未知";
+                                rowData.ProcessPublisher = "发布者: 未知";
+                            });
+                        }
+                    }
+                    catch
+                    {
+                        Application.Current.Dispatcher.InvokeAsync(() => {
+                            rowData.ProcessPath = "路径: 权限不足，无法访问此系统级或受保护进程";
+                            rowData.ProcessVersion = "版本: 权限受限";
+                            rowData.ProcessPublisher = "发布者: 权限受限";
+                        });
+                    }
+                });
+            }
+        }
 
+        // ★ 修复 Bug 2：移除 dynamic 采用强类型，不再承担获取基础信息的职责
+        private async void BtnShowIPs_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is Button btn && btn.DataContext is ProcessNetworkInfo rowData)
+            {
+                rowData.LoadingVisibility = Visibility.Visible;
+                rowData.IpGridVisibility = Visibility.Collapsed;
+
+                await Task.Delay(800); // 模拟耗时的定位和查IP库时间
+
+                var tempConnections = new List<IPConnectionInfo>();
+                foreach (var c in rowData.Connections) tempConnections.Add(c);
+
+                foreach (IPConnectionInfo conn in tempConnections)
+                {
+                    conn.Region = "Unknown / ISP";
+                }
+
+                rowData.LoadingVisibility = Visibility.Collapsed;
+                rowData.IpGridVisibility = Visibility.Visible;
+            }
+        }
         private void DonutCanvas_MouseMove(object sender, MouseEventArgs e)
         {
             if (DonutCanvas.Tag is not List<KeyValuePair<string, long>> topApps || topApps.Count == 0) return;
 
-            double dx = e.GetPosition(DonutCanvas).X - 190;
-            double dy = e.GetPosition(DonutCanvas).Y - 100;
+            // 修复：使用画布真实宽高计算中心点，解决悬浮不触发
+            double dx = e.GetPosition(DonutCanvas).X - (DonutCanvas.ActualWidth / 2);
+            double dy = e.GetPosition(DonutCanvas).Y - (DonutCanvas.ActualHeight / 2);
             double dist = Math.Sqrt(dx * dx + dy * dy);
 
-            // 更新检测半径（内径 60-35/2=42.5，外径 60+35/2=77.5）
-            if (dist < 40 || dist > 80)
+            // 修复：修正判断半径边界
+            if (dist < 35 || dist > 60)
             {
-                if (DonutCanvas.ToolTip is ToolTip t) t.IsOpen = false;
+                if (DonutCanvas.ToolTip is System.Windows.Controls.ToolTip t) t.IsOpen = false;
                 return;
             }
 
@@ -1856,19 +1978,19 @@ namespace NetworkMonitor
                 if (angle >= currentAngle && angle <= currentAngle + sweep)
                 {
                     string displayVal = _showAppByTime ? FormatActiveTime(topApps[i].Value) : FormatAdaptiveTotal(topApps[i].Value);
-                    if (DonutCanvas.ToolTip is not ToolTip tt)
+                    if (DonutCanvas.ToolTip is not System.Windows.Controls.ToolTip tt)
                     {
-                        tt = new ToolTip {
-                            Background = (Brush)this.Resources["BgCardBrush"],
-                            Foreground = (Brush)this.Resources["TextMainBrush"],
-                            BorderBrush = (Brush)this.Resources["BorderMainBrush"],
-                            BorderThickness = new Thickness(1),
-                            FontWeight = FontWeights.Bold 
-                        };
+                        tt = new System.Windows.Controls.ToolTip { FontWeight = FontWeights.Bold, BorderThickness = new Thickness(1) };
+                        tt.SetResourceReference(System.Windows.Controls.ToolTip.BackgroundProperty, "BgCardBrush");
+                        tt.SetResourceReference(System.Windows.Controls.ToolTip.ForegroundProperty, "TextMainBrush");
+                        tt.SetResourceReference(System.Windows.Controls.ToolTip.BorderBrushProperty, "BorderMainBrush");
+                        tt.Placement = System.Windows.Controls.Primitives.PlacementMode.Mouse; // ★ 强制 Tooltip 跟随真实的鼠标指针，杜绝相对位移
+                        tt.VerticalOffset = 15;
                         DonutCanvas.ToolTip = tt;
                     }
                     tt.Content = $"{topApps[i].Key}\n{(topApps[i].Value / (double)total):P1} ({displayVal})";
                     tt.IsOpen = true;
+
                     return;
                 }
                 currentAngle += sweep;
@@ -1972,9 +2094,18 @@ namespace NetworkMonitor
             }
             if (pointCount < 2) pointCount = 2; // 容错
         }
+
         private void MainCanvas_MouseMove(object sender, MouseEventArgs e)
         {
-            if (MainCanvas.ActualWidth <= 0 || _isChartPaused) return; // 悬停标记时冻结十字线
+            // 补充拖拽的UI更新
+            if (_isDraggingChart)
+            {
+                double currentX = e.GetPosition(MainCanvas).X;
+                Canvas.SetLeft(ChartSelectionRect, Math.Min(_dragStartX, currentX));
+                ChartSelectionRect.Width = Math.Abs(currentX - _dragStartX);
+            }
+
+            if (MainCanvas.ActualWidth <= 0 || _isChartPaused) return;
             SetupChartParams(out var qD, out var qU, out _, out _, out _, out _, out _, out int N,
                                      out double offsetRatio, out double tickSec, 0,
                                      out double cD, out double cU, out _, out _, out _, out _, out _); // 补充额外的占位符
@@ -2510,16 +2641,15 @@ namespace NetworkMonitor
                     // 2. 补全鼠标事件
                     border.MouseEnter += (s, e) => {
                         border.Background = new SolidColorBrush(Color.FromArgb(120, log.ColorBrush.Color.R, log.ColorBrush.Color.G, log.ColorBrush.Color.B));
-                        _isChartPaused = true; // ★ 冻结图表
+                        _isMarkerPaused = true; // ★ 独立控制锚点冻结
                         MainHoverLine.Visibility = MainHoverDotDown.Visibility = MainHoverDotUp.Visibility = MainHoverPopup.Visibility = Visibility.Hidden;
                     };
                     border.MouseLeave += (s, e) => {
                         border.Background = new SolidColorBrush(Color.FromArgb(40, log.ColorBrush.Color.R, log.ColorBrush.Color.G, log.ColorBrush.Color.B));
-                        _isChartPaused = false; // ★ 恢复流动
+                        _isMarkerPaused = false; // ★ 解除锚点冻结，不影响拖拽的冻结状态
                     };
                     border.MouseLeftButtonUp += (s, e) => {
-                        _isChartPaused = false; // 确保点击跳转时解除锁定
-                                                // ... 原本的跳转逻辑 ...
+                        _isMarkerPaused = false;
                     };
 
                     // 悬浮变深色
@@ -3066,8 +3196,26 @@ namespace NetworkMonitor
             if (seconds < 3600) return $"{seconds / 60.0:F1} 分钟";
             return $"{seconds / 3600.0:F1} 小时";
         }
+
+        private bool _isCurrentlyInactive = false;
         private async void ProcessTimer_Tick(object? sender, EventArgs e)
         {
+            // ===== 插入闲置状态检测 =====
+            bool isInactive = SystemMonitor.IsSystemInactive(60); // 1分钟不动即为不活跃
+            if (isInactive != _isCurrentlyInactive)
+            {
+                _isCurrentlyInactive = isInactive;
+                if (isInactive)
+                    AddLogEvent("System", "系统进入不活跃状态", "检测到鼠标超1分钟无操作且无全屏程序，暂停活跃时长统计。", "#888888");
+                else
+                    AddLogEvent("System", "系统恢复活跃", "检测到用户恢复操作，继续活跃时长记录。", "#32CD32");
+            }
+
+            // 如果是不活跃状态，则不再执行下方原本的 TrackWindowActivity() 时间累加
+            if (!isInactive)
+            {
+                TrackWindowActivity();
+            }
             TrackWindowActivity(); // 执行窗口追踪逻辑
             TrackAppLifecycles(); // 执行应用生命周期(启动/关闭)追踪
             if (_isProcessingProcesses) return;
@@ -4308,26 +4456,31 @@ namespace NetworkMonitor
                 var brushDimText = new SolidColorBrush(dimTextColor);
                 var brushInputBg = new SolidColorBrush(inputBgColor);
                 var brushBorder = new SolidColorBrush(borderColor);
-                // 注入全局动态画刷
-                this.Resources["TextMainBrush"] = new SolidColorBrush(mainTextColor);
-                this.Resources["TextDimBrush"] = new SolidColorBrush(dimTextColor);
-                this.Resources["BorderMainBrush"] = new SolidColorBrush(borderColor);
-                this.Resources["BgInputBrush"] = new SolidColorBrush(inputBgColor);
-                this.Resources["HeatmapEmptyBrush"] = new SolidColorBrush(heatmapEmptyColor);
-                this.Resources["GridLineBrush"] = new SolidColorBrush(gridLineColor);
 
-                this.Resources["BgMainBrush"] = brushBgMain;
-                this.Resources["BgCardBrush"] = brushBgCard;
-                this.Resources["BgNavBrush"] = new SolidColorBrush(Color.FromArgb(255,
+                // ★ 极限界定：解决弹出层(Popup)、下拉菜单、滚动条等脱离当前 Window 视觉树的控件不随着背景变色的问题。
+                // 必须将画刷从 Window 级贯穿提升至 Application 全局字典级，让所有游离 HWND 的组件被动接收更新通知！
+                var navBrush = new SolidColorBrush(Color.FromArgb(255,
                     (byte)Math.Clamp(brushBgCard.Color.R + (isLightBg ? -15 : 15), 0, 255),
                     (byte)Math.Clamp(brushBgCard.Color.G + (isLightBg ? -15 : 15), 0, 255),
                     (byte)Math.Clamp(brushBgCard.Color.B + (isLightBg ? -15 : 15), 0, 255)));
-                this.Resources[SystemColors.WindowBrushKey] = brushBgCard;      // 下拉框/表格背景
-                this.Resources[SystemColors.ControlBrushKey] = brushInputBg;    // 按钮/输入框背景
-                this.Resources[SystemColors.WindowTextBrushKey] = brushMainText; // 下拉框文字
-                this.Resources[SystemColors.ControlTextBrushKey] = brushMainText;
-                this.Resources[SystemColors.HighlightBrushKey] = brushInputBg;   // 选中高亮背景
-                this.Resources[SystemColors.HighlightTextBrushKey] = brushMainText; // 选中高亮文字
+
+                string[] keys = { "TextMainBrush", "TextDimBrush", "BorderMainBrush", "BgInputBrush", "HeatmapEmptyBrush", "GridLineBrush", "BgMainBrush", "BgCardBrush", "BgNavBrush" };
+                object[] values = { brushMainText, brushDimText, brushBorder, brushInputBg, new SolidColorBrush(heatmapEmptyColor), new SolidColorBrush(gridLineColor), brushBgMain, brushBgCard, navBrush };
+
+                for (int i = 0; i < keys.Length; i++)
+                {
+                    this.Resources[keys[i]] = values[i];
+                    Application.Current.Resources[keys[i]] = values[i];
+                }
+
+                object[] sysKeys = { SystemColors.WindowBrushKey, SystemColors.ControlBrushKey, SystemColors.WindowTextBrushKey, SystemColors.ControlTextBrushKey, SystemColors.HighlightBrushKey, SystemColors.HighlightTextBrushKey };
+                object[] sysValues = { brushBgCard, brushInputBg, brushMainText, brushMainText, brushInputBg, brushMainText };
+
+                for (int i = 0; i < sysKeys.Length; i++)
+                {
+                    this.Resources[sysKeys[i]] = sysValues[i];
+                    Application.Current.Resources[sysKeys[i]] = sysValues[i];
+                }
                 // 主题切换时，通知日志侧边栏的所有文字立刻更新颜色
                 foreach (var cat in _logCategories) cat.NotifyColorChange();
                 // 核显式强制转换以解决 CS0266

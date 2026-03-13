@@ -259,6 +259,9 @@ namespace NetworkMonitor
 
         // 存储共用该 IP 的其他进程名称
         public ObservableCollection<string> AssociatedProcesses { get; set; } = new ObservableCollection<string>();
+        // 正确的区域属性归属
+        private string _region = "等待解析...";
+        public string Region { get => _region; set { _region = value; OnPropertyChanged(nameof(Region)); } }
 
         public event PropertyChangedEventHandler? PropertyChanged;
         protected void OnPropertyChanged(string name) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
@@ -297,6 +300,21 @@ namespace NetworkMonitor
 
         public event PropertyChangedEventHandler? PropertyChanged;
         protected void OnPropertyChanged(string name) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
+        // ------ 插入至记录进程网络流的实体类内部 ------
+        public string ProcessPath { get; set; } = "路径: ⏳ 正在自动获取...";
+        public string ProcessVersion { get; set; } = "版本: ⏳ 正在自动获取...";
+        public string ProcessPublisher { get; set; } = "发布者: ⏳ 正在自动获取...";
+        public string ProcessAlerts { get; set; } = "";
+
+        private Visibility _ipGridVisibility = Visibility.Collapsed;
+        public Visibility IpGridVisibility { get => _ipGridVisibility; set { _ipGridVisibility = value; OnPropertyChanged(nameof(IpGridVisibility)); } }
+
+        private Visibility _loadingVisibility = Visibility.Collapsed;
+        public Visibility LoadingVisibility { get => _loadingVisibility; set { _loadingVisibility = value; OnPropertyChanged(nameof(LoadingVisibility)); } }
+        public string Region { get; set; } = "等待解析...";
+
+
+
     }
 
     // 定义一个简单的类来避免元组识别问题

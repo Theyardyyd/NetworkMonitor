@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Net;
 using System.Runtime.InteropServices;
 using System.Text;
+using System.Windows;
 using static NetworkMonitor.MainWindow;
 
 namespace NetworkMonitor
@@ -44,8 +45,7 @@ namespace NetworkMonitor
         public static extern bool GetSystemPowerStatus(out SYSTEM_POWER_STATUS sps);
         [DllImport("kernel32.dll")] public static extern bool GlobalMemoryStatusEx(ref MEMORYSTATUSEX m);
 
-        [DllImport("user32.dll")]
-        public static extern IntPtr GetForegroundWindow();
+
 
         [DllImport("user32.dll")]
         public static extern bool IsWindowVisible(IntPtr hWnd);
@@ -88,7 +88,38 @@ namespace NetworkMonitor
         // 用于检测全屏看视频或全屏游戏状态 (QUNS_RUNNING_D3D_FULL_SCREEN = 3, QUNS_PRESENTATION_MODE = 4)
         [DllImport("shell32.dll")]
         public static extern int SHQueryUserNotificationState(out int pquns);
+        [DllImport("user32.dll")]
+        public static extern IntPtr GetForegroundWindow();
 
+        [DllImport("user32.dll")]
+        public static extern IntPtr GetDesktopWindow();
+
+        public static bool IsForegroundFullScreenVideoOrGame()
+        {
+            // 简易全屏检测判断：检测前台窗口是否完全覆盖桌面
+            IntPtr hWnd = GetForegroundWindow();
+            if (hWnd == GetDesktopWindow() || hWnd == GetShellWindow() || hWnd == IntPtr.Zero) return false;
+
+            GetWindowRect(hWnd, out RECT rect);
+            int w = rect.Right - rect.Left;
+            int h = rect.Bottom - rect.Top;
+            int screenW = (int)SystemParameters.PrimaryScreenWidth;
+            int screenH = (int)SystemParameters.PrimaryScreenHeight;
+            return (w >= screenW && h >= screenH);
+        }
+
+        public static bool IsSystemInactive(int maxIdleSeconds = 60)
+        {
+            LASTINPUTINFO lastInPut = new LASTINPUTINFO();
+            lastInPut.cbSize = (uint)Marshal.SizeOf(lastInPut);
+            GetLastInputInfo(ref lastInPut);
+            uint idleTime = ((uint)Environment.TickCount - lastInPut.dwTime) / 1000;
+
+            // 如果在全屏看视频/打游戏，则强制判断为"活跃状态"
+            if (IsForegroundFullScreenVideoOrGame()) return false;
+
+            return idleTime > maxIdleSeconds;
+        }
 
 
     }
