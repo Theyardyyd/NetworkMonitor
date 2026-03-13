@@ -1,0 +1,8 @@
+.vs/
+bin/
+obj/
+*.user
+*.suo
+*.cache
+*.json
+!NetworkMonitor/process_dict.json

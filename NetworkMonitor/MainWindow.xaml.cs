@@ -1,4 +1,6 @@
 ﻿
+using Microsoft.Diagnostics.Tracing.Parsers;
+using Microsoft.Diagnostics.Tracing.Session;
 using Microsoft.VisualBasic.Logging;
 using Microsoft.Win32; // 用于操作注册表开机自启
 using System;
@@ -29,9 +31,9 @@ using System.Windows.Media.Imaging;
 using System.Windows.Media.Media3D;
 using System.Windows.Shapes;
 using System.Windows.Threading;
+using static NetworkMonitor.DashboardSaveData;
 using static NetworkMonitor.MainWindow;
 using Forms = System.Windows.Forms;
-using static NetworkMonitor.SystemMonitor;
 
 namespace NetworkMonitor
 {
@@ -40,24 +42,9 @@ namespace NetworkMonitor
     public partial class MainWindow : Window
     {
 
-        private bool _isUserIdle = false;
-        private ulong _idleStartTotalDownload = 0;
-        private ulong _idleStartTotalUpload = 0;
+
         public static int TooltipMode = 2; // 全局进程悬停解释模式 (0=不显示, 1=仅名称, 2=名称+描述)
         private bool _isChartPaused = false; // 用于控制流量图在悬停时暂停滚动
-
-        // 图表时间框选控制变量
-        private bool _isSelectingChart = false;
-        private double _selectionStartX = 0;
-        private DateTime _selectedStartTime;
-        private DateTime _selectedEndTime;
-        private bool _hasActiveTimeSelection = false;
-
-        // 高精度环形缓冲区与 IP 归属地缓存
-        private const int RING_BUFFER_SIZE = 1800; // 保存过去 1 小时的历史切片 (每2秒一个切片 = 1800个)
-        private TrafficSnapshot[] _trafficRingBuffer = new TrafficSnapshot[RING_BUFFER_SIZE];
-        private int _ringBufferIndex = 0;
-        private ConcurrentDictionary<string, string> _ipGeoCache = new ConcurrentDictionary<string, string>();
         // 飞线动画时间计数器
         private double _flyingLineTime = 0;
 
@@ -171,165 +158,7 @@ namespace NetworkMonitor
             TxtGpu.Visibility = LineGpu.Visibility = _savedData.ShowGpu ? Visibility.Visible : Visibility.Collapsed;
             TxtDisk.Visibility = LineDisk.Visibility = _savedData.ShowDisk ? Visibility.Visible : Visibility.Collapsed;
         }
-        // ==========================================
-        // 阶段 2：切片聚合器与 Geo-IP 引擎
-        // ==========================================
-        private async void CalculateSelectionTrafficAsync()
-        {
-            if (!_hasActiveTimeSelection) return;
-            // 1. 立即清空旧数据，并展示 Loading 提示，缓解用户“没反应”的错觉
-            _processTrafficList.Clear();
-            if (this.FindName("TxtTrafficLoading") is TextBlock loadingTxt) loadingTxt.Visibility = Visibility.Visible;
-            await Task.Run(async () => {
-                var selectedDown = new Dictionary<int, ulong>();
-                var selectedUp = new Dictionary<int, ulong>();
-                // IP -> (下载, 上传, PID集合)
-                var selectedIps = new Dictionary<string, (ulong Down, ulong Up, HashSet<int> Pids)>();
 
-                lock (_saveDataLock)
-                {
-                    for (int i = 0; i < RING_BUFFER_SIZE; i++)
-                    {
-                        var snap = _trafficRingBuffer[i];
-                        if (snap == null) continue;
-                        if (snap.Timestamp >= _selectedStartTime && snap.Timestamp <= _selectedEndTime)
-                        {
-                            // 修复 CS0411：显式处理字典累加
-                            foreach (var kv in snap.PidDownload)
-                                selectedDown[kv.Key] = (selectedDown.ContainsKey(kv.Key) ? selectedDown[kv.Key] : 0UL) + kv.Value;
-
-                            foreach (var kv in snap.PidUpload)
-                                selectedUp[kv.Key] = (selectedUp.ContainsKey(kv.Key) ? selectedUp[kv.Key] : 0UL) + kv.Value;
-
-                            foreach (var kv in snap.PidIPs)
-                            {
-                                int pid = kv.Key;
-                                ulong d = snap.PidDownload.ContainsKey(pid) ? snap.PidDownload[pid] : 0UL;
-                                ulong u = snap.PidUpload.ContainsKey(pid) ? snap.PidUpload[pid] : 0UL;
-                                ulong dPerIp = kv.Value.Count > 0 ? d / (ulong)kv.Value.Count : 0;
-                                ulong uPerIp = kv.Value.Count > 0 ? u / (ulong)kv.Value.Count : 0;
-
-                                foreach (var ip in kv.Value)
-                                {
-                                    if (!selectedIps.ContainsKey(ip)) selectedIps[ip] = (0, 0, new HashSet<int>());
-                                    var current = selectedIps[ip];
-                                    selectedIps[ip] = (current.Down + dPerIp, current.Up + uPerIp, current.Pids);
-                                    selectedIps[ip].Pids.Add(pid);
-                                }
-                            }
-                        }
-                    }
-                }
-
-                // 2. 并发查询所有出现过的 IP 的归属地
-                var geoTasks = selectedIps.Keys.Select(ip => GetGeoIpAsync(ip)).ToList();
-                await Task.WhenAll(geoTasks);
-                var newProcessList = new List<ProcessNetworkInfo>();
-
-                foreach (var kv in selectedDown)
-                {
-                    if (_pidNameCache.TryGetValue(kv.Key, out string name))
-                    {
-                        ulong totalD = kv.Value;
-                        ulong totalU = selectedUp.GetValueOrDefault(kv.Key, 0UL);
-
-                        var proc = newProcessList.FirstOrDefault(p => p.ProcessName == name);
-                        if (proc == null)
-                        {
-                            proc = new ProcessNetworkInfo { ProcessName = name, RawDownload = 0, RawUpload = 0 };
-                            newProcessList.Add(proc);
-                        }
-                        proc.RawDownload += (long)totalD;
-                        proc.RawUpload += (long)totalU;
-
-                        foreach (var ipEntry in selectedIps)
-                        {
-                            if (ipEntry.Value.Pids.Contains(kv.Key))
-                            {
-                                var info = proc.Connections.FirstOrDefault(c => c.IP == ipEntry.Key);
-                                if (info == null)
-                                {
-                                    info = new IPConnectionInfo
-                                    {
-                                        IP = ipEntry.Key,
-                                        FlagAndRegion = _ipGeoCache.GetValueOrDefault(ipEntry.Key, "🌍 未知"),
-                                        DownloadDisplay = FormatAdaptiveTotal(ipEntry.Value.Down),
-                                        UploadDisplay = FormatAdaptiveTotal(ipEntry.Value.Up)
-                                    };
-
-                                    foreach (var otherPid in ipEntry.Value.Pids)
-                                    {
-                                        if (otherPid != kv.Key && _pidNameCache.TryGetValue(otherPid, out string otherName) && otherName != name)
-                                        {
-                                            if (!info.AssociatedProcesses.Contains(otherName)) info.AssociatedProcesses.Add(otherName);
-                                        }
-                                    }
-                                    proc.Connections.Add(info);
-                                }
-                            }
-                        }
-                    }
-                }
-
-                // 在后台排序好
-                var finalSortedList = newProcessList.OrderByDescending(x => x.RawDownload + x.RawUpload).ToList();
-
-                // 3. 组装结果并推送给 UI
-                Dispatcher.InvokeAsync(() => {
-                    if (this.FindName("TxtTrafficLoading") is TextBlock text) text.Visibility = Visibility.Collapsed;
-                    if (!_hasActiveTimeSelection) return;
-
-                    _processTrafficList.Clear();
-                    foreach (var p in finalSortedList)
-                    {
-                        p.DownloadDisplay = FormatAdaptiveTotal(p.RawDownload);
-                        p.UploadDisplay = FormatAdaptiveTotal(p.RawUpload);
-                        p.State = "📌 历史切片回溯中";
-                        p.ConnectionCount = p.Connections.Count;
-                        _processTrafficList.Add(p);
-                    }
-                });
-
-            });
-        }
-
-        private async Task<string> GetGeoIpAsync(string ip)
-        {
-            if (EtwNetworkTracker.IsLanIP(ip) || ip == "127.0.0.1") return "🏠 局域网/本地";
-            if (_ipGeoCache.TryGetValue(ip, out string geo)) return geo;
-
-            _ipGeoCache[ip] = "⏳ 查询中...";
-            try
-            {
-                using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(3) };
-                // 使用免费且免 Key 的 ip-api.com
-                string json = await client.GetStringAsync($"http://ip-api.com/json/{ip}?lang=zh-CN");
-                using var doc = JsonDocument.Parse(json);
-                var root = doc.RootElement;
-                if (root.GetProperty("status").GetString() == "success")
-                {
-                    string countryCode = root.GetProperty("countryCode").GetString();
-                    string region = root.GetProperty("regionName").GetString();
-                    string flag = GetFlagEmoji(countryCode);
-                    string result = $"{flag} {region}";
-                    _ipGeoCache[ip] = result;
-                    return result;
-                }
-            }
-            catch { }
-            _ipGeoCache[ip] = "🌍 未知海外";
-            return "🌍 未知海外";
-        }
-
-        private string GetFlagEmoji(string countryCode)
-        {
-            if (string.IsNullOrEmpty(countryCode) || countryCode.Length != 2) return "🌍";
-            int flagOffset = 0x1F1E6;
-            int asciiOffset = 0x41;
-            int firstChar = countryCode[0] - asciiOffset + flagOffset;
-            int secondChar = countryCode[1] - asciiOffset + flagOffset;
-            return char.ConvertFromUtf32(firstChar) + char.ConvertFromUtf32(secondChar);
-        }
         private void DictDataGrid_CellEditEnding(object sender, DataGridCellEditEndingEventArgs e)
         {
             // 延迟执行以等待绑定值更新完成
@@ -714,8 +543,8 @@ namespace NetworkMonitor
         private ObservableCollection<AppSessionInfo> _uiAppLogs = new ObservableCollection<AppSessionInfo>();
         private ObservableCollection<AppSessionInfo> _uiSnapshotApps = new ObservableCollection<AppSessionInfo>();
 
-        // 
-        private void TrackAppLifecyclesBackground()
+        // ★ 核心方法：追踪有界面的软件的启动和关闭
+        private void TrackAppLifecycles()
         {
             var currentPids = new HashSet<int>();
             var processes = Process.GetProcesses();
@@ -773,14 +602,9 @@ namespace NetworkMonitor
                             {
                                 ProcessName = pName,
                                 ExePath = path,
-                                StartTime = DateTime.Now
+                                StartTime = DateTime.Now,
+                                Icon = GetIcon(path) // ★ 提取图标
                             };
-
-                            // 使用 InvokeAsync 异步分发系统图标提取，不阻塞后台分析线程，并避免跨线程异常
-                            Application.Current.Dispatcher.InvokeAsync(() => {
-                                session.Icon = GetIcon(path);
-                            });
-
                             _activeAppSessions[p.Id] = session;
 
                             lock (_saveDataLock)
@@ -914,27 +738,6 @@ namespace NetworkMonitor
                 }
             });
             InitSystemTray();
-
-            // ★ 新增：恢复悬浮窗的显示状态
-            if (_savedData.ShowMiniWindow)
-            {
-                Dispatcher.InvokeAsync(() => {
-                    if (_miniWindow == null)
-                    {
-                        _miniWindow = new MiniWindow(this);
-                        _miniWindow.Closed += (sender, args) => {
-                            _miniWindow = null;
-                            if (!_isRealExit)
-                            {
-                                lock (_saveDataLock) { _savedData.ShowMiniWindow = false; }
-                                SaveData();
-                            }
-                        };
-                    }
-                    _miniWindow.Show();
-                }, DispatcherPriority.Background);
-            }
-
             UpdateNavStyle(NavTraffic);
 
             // 使用新的隔离算法初始化基准线，防止启动第一秒出现负数网速
@@ -1022,17 +825,7 @@ namespace NetworkMonitor
                 PreviewLabelCpu.FontSize = PreviewLabelRam.FontSize = previewSize;
                 PreviewTextSample.FontSize = previewSize * 0.8; // 辅助文本稍小一点
 
-                // 3. 实时更新持久化数据并应用到全局 UI
-                _savedData.ColorDown = EditColorDown.Text;
-                _savedData.ColorUp = EditColorUp.Text;
-                _savedData.ColorCpu = EditColorCpu.Text;
-                _savedData.ColorRam = EditColorRam.Text;
-                if (EditColorBgMain != null) _savedData.ColorBgMain = EditColorBgMain.Text;
-                if (EditColorBgCard != null) _savedData.ColorBgCard = EditColorBgCard.Text;
-                _savedData.GlobalFontSize = SliderFontSize.Value;
-
-                ApplyTheme(); // 实时应用替换所有模块元素
-
+                // 3. 实时应用到全局 UI
                 TxtDown.Foreground = brushDown;
                 TxtUp.Foreground = brushUp;
                 PolyDown.Stroke = brushDown;
@@ -1139,9 +932,6 @@ namespace NetworkMonitor
 
             // 右键菜单与开机自启选项
             var menu = new Forms.ContextMenuStrip();
-            menu.BackColor = System.Drawing.Color.FromArgb(30, 30, 35);
-            menu.ForeColor = System.Drawing.Color.White;
-            menu.RenderMode = Forms.ToolStripRenderMode.System;
             menu.Items.Add("显示主面板", null, (s, e) => ShowWindow());
 
             var autoStartItem = new Forms.ToolStripMenuItem("开机自启 (注册表)");
@@ -1150,42 +940,16 @@ namespace NetworkMonitor
             autoStartItem.CheckedChanged += (s, e) => ToggleAutoStart(autoStartItem.Checked);
             menu.Items.Add(autoStartItem);
 
-            // 替换原有的 menu.Items.Add("显示桌面悬浮窗", null, (s, e) => { ... });
-            menu.Items.Add("显示/隐藏 桌面悬浮窗", null, (s, e) => {
-                if (_miniWindow == null)
-                {
-                    _miniWindow = new MiniWindow(this);
-                    // 监听悬浮窗的关闭事件
-                    _miniWindow.Closed += (sender, args) => {
-                        _miniWindow = null;
-                        // 如果不是程序完全退出引发的关闭，则记录用户手动关闭了悬浮窗
-                        if (!_isRealExit)
-                        {
-                            lock (_saveDataLock) { _savedData.ShowMiniWindow = false; }
-                            SaveData();
-                        }
-                    };
-                }
-
-                if (_miniWindow.IsVisible)
-                {
-                    _miniWindow.Hide();
-                    lock (_saveDataLock) { _savedData.ShowMiniWindow = false; }
-                }
-                else
-                {
-                    _miniWindow.Show();
-                    lock (_saveDataLock) { _savedData.ShowMiniWindow = true; }
-                }
-                SaveData();
-            });
             menu.Items.Add("完全退出", null, (s, e) => {
                 _isRealExit = true;
                 SaveData();
                 _trayIcon.Visible = false;
                 _trayIcon.Dispose();
-                _trayIcon.Dispose();
                 Application.Current.Shutdown();
+            });
+            menu.Items.Add("显示桌面悬浮窗", null, (s, e) => {
+                if (_miniWindow == null) _miniWindow = new MiniWindow(this);
+                _miniWindow.Show();
             });
             _trayIcon.ContextMenuStrip = menu;
 
@@ -1225,30 +989,7 @@ namespace NetworkMonitor
 
                 if (!_savedData.HasAskedMinimize)
                 {
-                    var msgWin = new Window
-                    {
-                        Title = "后台运行提示",
-                        Width = 400,
-                        Height = 200,
-                        WindowStartupLocation = WindowStartupLocation.CenterScreen,
-                        Background = new SolidColorBrush(Color.FromRgb(24, 24, 30)),
-                        WindowStyle = WindowStyle.ToolWindow,
-                        Topmost = true
-                    };
-                    var sp = new StackPanel { Margin = new Thickness(20) };
-                    sp.Children.Add(new TextBlock { Text = "是否让 DashBoard 在后台继续运行以监控流量？", Foreground = Brushes.White, FontSize = 16, FontWeight = FontWeights.Bold, Margin = new Thickness(0, 0, 0, 20), TextWrapping = TextWrapping.Wrap });
-
-                    var btnYes = new Button { Content = "是：最小化到系统托盘", Background = new SolidColorBrush(Color.FromRgb(0, 229, 255)), Foreground = Brushes.Black, Padding = new Thickness(10), Margin = new Thickness(0, 0, 0, 10), FontWeight = FontWeights.Bold, Cursor = Cursors.Hand };
-                    var btnNo = new Button { Content = "否：完全退出程序", Background = new SolidColorBrush(Color.FromRgb(255, 61, 113)), Foreground = Brushes.White, Padding = new Thickness(10), FontWeight = FontWeights.Bold, Cursor = Cursors.Hand };
-
-                    MessageBoxResult result = MessageBoxResult.Cancel;
-                    btnYes.Click += (s, ev) => { result = MessageBoxResult.Yes; msgWin.Close(); };
-                    btnNo.Click += (s, ev) => { result = MessageBoxResult.No; msgWin.Close(); };
-
-                    sp.Children.Add(btnYes);
-                    sp.Children.Add(btnNo);
-                    msgWin.Content = sp;
-                    msgWin.ShowDialog();
+                    var result = MessageBox.Show("是否让 DashBoard 在后台继续运行以监控流量？\n\n选择【是】：最小化到系统托盘\n选择【否】：完全退出程序", "后台运行提示", MessageBoxButton.YesNoCancel, MessageBoxImage.Question);
 
                     if (result == MessageBoxResult.Yes)
                     {
@@ -1330,14 +1071,7 @@ namespace NetworkMonitor
                     _savedData.DailySecondaryTime ??= new Dictionary<string, Dictionary<string, long>>();
                     _savedData.DailyBackgroundTime ??= new Dictionary<string, Dictionary<string, long>>();
                     _savedData.AppVersions ??= new Dictionary<string, string>();
-                    if (string.IsNullOrEmpty(_savedData.ColorDown)) _savedData.ColorDown = "#FF2277";
-                    if (string.IsNullOrEmpty(_savedData.ColorUp)) _savedData.ColorUp = "#00E5FF";
-                    if (string.IsNullOrEmpty(_savedData.ColorCpu)) _savedData.ColorCpu = "#ff3d71";
-                    if (string.IsNullOrEmpty(_savedData.ColorRam)) _savedData.ColorRam = "#A142F4";
-                    if (string.IsNullOrEmpty(_savedData.ColorBgMain)) _savedData.ColorBgMain = "#121216";
-                    if (string.IsNullOrEmpty(_savedData.ColorBgCard)) _savedData.ColorBgCard = "#18181e";
-                    if (_savedData.GlobalFontSize < 10) _savedData.GlobalFontSize = 14;
-                    if (_savedData.ScrollSpeed <= 0) _savedData.ScrollSpeed = 1.0;
+
                     _minDown = new Queue<double>(_savedData.SavedMinDown?.Count > 0 ? _savedData.SavedMinDown : Enumerable.Repeat(0.0, 185));
                     _minUp = new Queue<double>(_savedData.SavedMinUp?.Count > 0 ? _savedData.SavedMinUp : Enumerable.Repeat(0.0, 185));
                     _secDown = new Queue<double>(_savedData.SavedSecDown?.Count > 0 ? _savedData.SavedSecDown : Enumerable.Repeat(0.0, 305));
@@ -2238,86 +1972,12 @@ namespace NetworkMonitor
             }
             if (pointCount < 2) pointCount = 2; // 容错
         }
-        private void MainCanvas_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
-        {
-            if (MainCanvas.ActualWidth <= 0) return;
-            _isSelectingChart = true;
-            _isChartPaused = true;
-            _selectionStartX = e.GetPosition(MainCanvas).X;
-
-            ChartSelectionRect.Visibility = Visibility.Visible;
-            Canvas.SetLeft(ChartSelectionRect, _selectionStartX);
-            ChartSelectionRect.Width = 0;
-
-            MainCanvas.CaptureMouse();
-        }
-
-        private void MainCanvas_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
-        {
-            if (_isSelectingChart)
-            {
-                _isSelectingChart = false;
-                MainCanvas.ReleaseMouseCapture();
-
-                double endX = e.GetPosition(MainCanvas).X;
-                if (Math.Abs(endX - _selectionStartX) < 5)
-                {
-                    ChartSelectionRect.Visibility = Visibility.Hidden;
-                    SelectionHintPopup.Visibility = Visibility.Hidden; // 隐藏悬浮框
-                    _hasActiveTimeSelection = false;
-                    _isChartPaused = false; 
-                }
-                else
-                {
-                    _hasActiveTimeSelection = true;
-                    _isChartPaused = true; // ★ 保持冻结
-
-                    // ★ 阶段 2：计算选区对应的起止绝对时间
-                    double leftX = Math.Min(_selectionStartX, endX);
-                    double rightX = Math.Max(_selectionStartX, endX);
-                    double w = MainCanvas.ActualWidth;
-                    double windowSec = _currentViewMode;
-
-                    double secFromRightToStart = ((w - leftX) / w) * windowSec;
-                    double secFromRightToEnd = ((w - rightX) / w) * windowSec;
-
-                    // 越靠左 X 越小，距离现在的秒数就越大，时间越久远
-                    _selectedStartTime = DateTime.Now.AddSeconds(-secFromRightToStart);
-                    _selectedEndTime = DateTime.Now.AddSeconds(-secFromRightToEnd);
-
-                    AddLogEvent("TimeSlice", "选区切片已锁定", $"已锁定时间范围:\n{_selectedStartTime:HH:mm:ss} 至 {_selectedEndTime:HH:mm:ss}\n正在后台解析IP归属地并聚合流量...", "#00E5FF");
-
-                    // 触发后台数据切片重算与归属地查询
-                    CalculateSelectionTrafficAsync();
-                }
-            }
-        }
         private void MainCanvas_MouseMove(object sender, MouseEventArgs e)
         {
-            if (MainCanvas.ActualWidth <= 0) return;
-
-            if (_isSelectingChart)
-            {
-                double currentX = e.GetPosition(MainCanvas).X;
-                double left = Math.Min(_selectionStartX, currentX);
-                double width = Math.Abs(currentX - _selectionStartX);
-                Canvas.SetLeft(ChartSelectionRect, left);
-                ChartSelectionRect.Width = width;
-
-                // 让提示框居中跟随拖拽区域
-                SelectionHintPopup.Visibility = Visibility.Visible;
-                Canvas.SetLeft(SelectionHintPopup, left + width / 2 - 50);
-                Canvas.SetTop(SelectionHintPopup, 20);
-                return; // 框选时不再移动十字准星
-            }
-
-            if (_isChartPaused) return; // 悬停标记时冻结十字线
-
-            // ... 以下为原有的十字准星逻辑
+            if (MainCanvas.ActualWidth <= 0 || _isChartPaused) return; // 悬停标记时冻结十字线
             SetupChartParams(out var qD, out var qU, out _, out _, out _, out _, out _, out int N,
-                         out double offsetRatio, out double tickSec, 0,
-                         out double cD, out double cU, out _, out _, out _, out _, out _);
-
+                                     out double offsetRatio, out double tickSec, 0,
+                                     out double cD, out double cU, out _, out _, out _, out _, out _); // 补充额外的占位符
             double visualOff = offsetRatio - 1.0;
             double wx = MainCanvas.ActualWidth, hx = MainCanvas.ActualHeight;
             double px = e.GetPosition(MainCanvas).X, stepX = wx / (N - 2);
@@ -2340,13 +2000,6 @@ namespace NetworkMonitor
             MainHoverUpText.Text = FormatAdaptiveRate(uArr[i], _isBitMode);
             DateTime hoverTime = DateTime.Now.AddSeconds(-(N - 2 - i + offsetRatio) * tickSec);
             MainHoverTime.Text = hoverTime.ToString(tickSec <= 3600 ? "HH:mm:ss" : "MM-dd HH:mm");
-        }
-        private void MainCanvas_MouseLeave(object sender, MouseEventArgs e)
-        {
-            if (!_isSelectingChart)
-            {
-                MainHoverLine.Visibility = MainHoverDotDown.Visibility = MainHoverDotUp.Visibility = MainHoverPopup.Visibility = Visibility.Hidden;
-            }
         }
 
         private void ResCanvas_MouseMove(object sender, MouseEventArgs e)
@@ -2481,7 +2134,10 @@ namespace NetworkMonitor
             DateTime hoverTime = DateTime.Now.AddSeconds(-(N - 2 - idx + offsetRatio) * tickSec);
             ResHoverTime.Text = hoverTime.ToString(tickSec <= 3600 ? "HH:mm:ss" : "MM-dd HH:mm");
         }
- 
+        private void MainCanvas_MouseLeave(object sender, MouseEventArgs e)
+        {
+            MainHoverLine.Visibility = MainHoverDotDown.Visibility = MainHoverDotUp.Visibility = MainHoverPopup.Visibility = Visibility.Hidden;
+        }
 
         private void ResCanvas_MouseLeave(object sender, MouseEventArgs e)
         {
@@ -2855,18 +2511,21 @@ namespace NetworkMonitor
                     border.MouseEnter += (s, e) => {
                         border.Background = new SolidColorBrush(Color.FromArgb(120, log.ColorBrush.Color.R, log.ColorBrush.Color.G, log.ColorBrush.Color.B));
                         _isChartPaused = true; // ★ 冻结图表
-                        if (!_isSelectingChart)
-                        {
-                            MainHoverLine.Visibility = MainHoverDotDown.Visibility = MainHoverDotUp.Visibility = MainHoverPopup.Visibility = Visibility.Hidden;
-                        }
+                        MainHoverLine.Visibility = MainHoverDotDown.Visibility = MainHoverDotUp.Visibility = MainHoverPopup.Visibility = Visibility.Hidden;
                     };
                     border.MouseLeave += (s, e) => {
                         border.Background = new SolidColorBrush(Color.FromArgb(40, log.ColorBrush.Color.R, log.ColorBrush.Color.G, log.ColorBrush.Color.B));
-                        if (!_isSelectingChart && !_hasActiveTimeSelection) _isChartPaused = false; // ★ 修复：如果有框选时不恢复流动
+                        _isChartPaused = false; // ★ 恢复流动
                     };
                     border.MouseLeftButtonUp += (s, e) => {
-                        if (!_isSelectingChart && !_hasActiveTimeSelection) _isChartPaused = false; // 确保点击跳转时解除锁定
+                        _isChartPaused = false; // 确保点击跳转时解除锁定
+                                                // ... 原本的跳转逻辑 ...
                     };
+
+                    // 悬浮变深色
+                    border.MouseEnter += (s, e) => border.Background = new SolidColorBrush(Color.FromArgb(120, log.ColorBrush.Color.R, log.ColorBrush.Color.G, log.ColorBrush.Color.B));
+                    border.MouseLeave += (s, e) => border.Background = new SolidColorBrush(Color.FromArgb(40, log.ColorBrush.Color.R, log.ColorBrush.Color.G, log.ColorBrush.Color.B));
+
                     // 顶端显示 ToolTip (带 Logo 的定制化气泡)
                     var tt = new ToolTip
                     {
@@ -3409,23 +3068,17 @@ namespace NetworkMonitor
         }
         private async void ProcessTimer_Tick(object? sender, EventArgs e)
         {
-            // 尽早拦截防重入，避免任务堆积引发连锁卡顿
+            TrackWindowActivity(); // 执行窗口追踪逻辑
+            TrackAppLifecycles(); // 执行应用生命周期(启动/关闭)追踪
             if (_isProcessingProcesses) return;
             _isProcessingProcesses = true;
             try
             {
-                // 窗口追踪属于极轻量级的 P/Invoke (获取前台窗口句柄)，必须保留在主线程同步执行
-                TrackWindowActivity();
-
                 var uiDict = await Task.Run(() => {
-                    // 将最耗时的全盘遍历方法送入后台线程池执行！
-                    TrackAppLifecyclesBackground();
-
                     var conns = GetAllTcpConnections();
                     var pAggs = new Dictionary<string, ProcessAggregateInfo>();
                     var pidIPs = new Dictionary<int, HashSet<string>>();
-                    // 初始化当前两秒的快照
-                    var snapshot = new TrafficSnapshot { Timestamp = DateTime.Now };
+
                     Action<int, string> addPidIp = (pid, ip) => {
                         if (!pidIPs.ContainsKey(pid)) pidIPs[pid] = new HashSet<string>();
                         if (ip != "0.0.0.0" && ip != "127.0.0.1")
@@ -3523,16 +3176,7 @@ namespace NetworkMonitor
 
                         _pidCurrentDelta[pid] = (readDelta, writeDelta);
 
-                        // ★ 阶段 2：将产生流量或有连接的进程写入历史快照
-                        if (readDelta > 0 || writeDelta > 0 || (pidIPs.ContainsKey(pid) && pidIPs[pid].Count > 0))
-                        {
-                            snapshot.PidDownload[pid] = readDelta;
-                            snapshot.PidUpload[pid] = writeDelta;
-                            if (pidIPs.ContainsKey(pid)) snapshot.PidIPs[pid] = new HashSet<string>(pidIPs[pid]);
-                        }
-
                         long currentPidTotal = (long)(readDelta + writeDelta);
-
                         long lastRec = _pidLastRecordedDaily.GetValueOrDefault(pid, 0);
                         long tickDelta = currentPidTotal - lastRec;
 
@@ -3576,11 +3220,7 @@ namespace NetworkMonitor
                     var tempUI = new Dictionary<string, ProcessNetworkInfo>();
                     lock (_saveDataLock)
                     {
-                        //  将本次快照归档入环形缓冲区，指针步进
-                        _trafficRingBuffer[_ringBufferIndex] = snapshot;
-                        _ringBufferIndex = (_ringBufferIndex + 1) % RING_BUFFER_SIZE;
-
-                        //  结算死亡进程
+                        // 4. ★ 核心重构 3：结算死亡进程，并从 ETW 中彻底摘除，防止 ETW 字典体积无限膨胀导致内存泄漏
                         foreach (var dPid in deadPids)
                         {
                             if (_pidNameCache.TryGetValue(dPid, out string? name))
@@ -3691,30 +3331,27 @@ namespace NetworkMonitor
                 });
 
                 // 6. 避免闪烁的平滑 UI 更新
-                if (!_hasActiveTimeSelection) // ★ 阶段 2：如果用户正在查阅历史选区，冻结进程列表的自动刷新！
-                {
-                    var toRem = _processTrafficList.Where(x => !uiDict.ContainsKey(x.ProcessName)).ToList();
-                    foreach (var r in toRem) _processTrafficList.Remove(r);
+                var toRem = _processTrafficList.Where(x => !uiDict.ContainsKey(x.ProcessName)).ToList();
+                foreach (var r in toRem) _processTrafficList.Remove(r);
 
-                    foreach (var kv in uiDict.OrderByDescending(x => x.Value.RawTotal))
+                foreach (var kv in uiDict.OrderByDescending(x => x.Value.RawTotal))
+                {
+                    var ex = _processTrafficList.FirstOrDefault(x => x.ProcessName == kv.Key);
+                    if (ex != null)
                     {
-                        var ex = _processTrafficList.FirstOrDefault(x => x.ProcessName == kv.Key);
-                        if (ex != null)
-                        {
-                            ex.DownloadDisplay = kv.Value.DownloadDisplay;
-                            ex.UploadDisplay = kv.Value.UploadDisplay;
-                            ex.RawDownload = kv.Value.RawDownload;
-                            ex.RawUpload = kv.Value.RawUpload;
-                            ex.ConnectionCount = kv.Value.ConnectionCount;
-                            ex.State = kv.Value.State;
-                            ex.RawTotal = kv.Value.RawTotal;
-                            var newIPs = kv.Value.Connections.Select(c => c.IP).ToList();
-                            var oldIPs = ex.Connections.Select(c => c.IP).ToList();
-                            foreach (var ip in oldIPs.Except(newIPs).ToList()) ex.Connections.Remove(ex.Connections.First(c => c.IP == ip));
-                            foreach (var ip in newIPs.Except(oldIPs).ToList()) ex.Connections.Add(new IPConnectionInfo { IP = ip });
-                        }
-                        else _processTrafficList.Add(kv.Value);
+                        ex.DownloadDisplay = kv.Value.DownloadDisplay;
+                        ex.UploadDisplay = kv.Value.UploadDisplay;
+                        ex.RawDownload = kv.Value.RawDownload; 
+                        ex.RawUpload = kv.Value.RawUpload;     
+                        ex.ConnectionCount = kv.Value.ConnectionCount;
+                        ex.State = kv.Value.State;
+                        ex.RawTotal = kv.Value.RawTotal;
+                        var newIPs = kv.Value.Connections.Select(c => c.IP).ToList();
+                        var oldIPs = ex.Connections.Select(c => c.IP).ToList();
+                        foreach (var ip in oldIPs.Except(newIPs).ToList()) ex.Connections.Remove(ex.Connections.First(c => c.IP == ip));
+                        foreach (var ip in newIPs.Except(oldIPs).ToList()) ex.Connections.Add(new IPConnectionInfo { IP = ip });
                     }
+                    else _processTrafficList.Add(kv.Value);
                 }
 
                 if (_activeTab == "Resources" && BtnBackToLive.Visibility != Visibility.Visible)
@@ -3884,7 +3521,12 @@ namespace NetworkMonitor
             foreach (var k in keysToRemove) _lastInterfaceStats.Remove(k);
         }
 
-
+        private List<TcpConnection> GetAllTcpConnections()
+        {
+            var res = new List<TcpConnection>(); int size = 0; GetExtendedTcpTable(IntPtr.Zero, ref size, true, 2, 5, 0); IntPtr ptr = Marshal.AllocHGlobal(size);
+            try { if (GetExtendedTcpTable(ptr, ref size, true, 2, 5, 0) == 0) { int cnt = Marshal.ReadInt32(ptr); IntPtr rPtr = (IntPtr)((long)ptr + 4); for (int i = 0; i < cnt; i++) { var r = Marshal.PtrToStructure<MIB_TCPROW_OWNER_PID>(rPtr); res.Add(new TcpConnection { State = r.state, RemoteAddress = new IPAddress(r.remoteAddr), RemotePort = (ushort)((r.remotePort & 0xff) << 8 | (r.remotePort >> 8) & 0xff), ProcessId = r.owningPid }); rPtr = (IntPtr)((long)rPtr + Marshal.SizeOf<MIB_TCPROW_OWNER_PID>()); } } } finally { Marshal.FreeHGlobal(ptr); }
+            return res;
+        }
         // ==========================================
         // 4. 3D 地球与路由追踪引擎
         // ==========================================
@@ -4385,104 +4027,107 @@ namespace NetworkMonitor
         }
 
 
+        [DllImport("iphlpapi.dll")] static extern uint GetExtendedTcpTable(IntPtr p, ref int s, bool b, int v, int c, uint r);
+        [DllImport("iphlpapi.dll")] static extern uint GetExtendedUdpTable(IntPtr p, ref int s, bool b, int v, int c, uint r);
+        [DllImport("kernel32.dll")] static extern bool GetProcessIoCounters(IntPtr h, out IO_COUNTERS c);
+        [DllImport("kernel32.dll")] static extern bool GetSystemTimes(out FILETIME i, out FILETIME k, out FILETIME u);
+        [StructLayout(LayoutKind.Sequential)]
+        public struct SYSTEM_POWER_STATUS
+        {
+            public byte ACLineStatus;
+            public byte BatteryFlag;
+            public byte BatteryLifePercent;
+            public byte SystemStatusFlag;
+            public int BatteryLifeTime;
+            public int BatteryFullLifeTime;
+        }
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        static extern bool GetSystemPowerStatus(out SYSTEM_POWER_STATUS sps);
+        [DllImport("kernel32.dll")] static extern bool GlobalMemoryStatusEx(ref MEMORYSTATUSEX m);
+
+        [DllImport("user32.dll")]
+        static extern IntPtr GetForegroundWindow();
+
+        [DllImport("user32.dll")]
+        static extern bool IsWindowVisible(IntPtr hWnd);
+
+        [DllImport("user32.dll")]
+        static extern bool IsIconic(IntPtr hWnd);
+
+        [DllImport("user32.dll")]
+        static extern int GetWindowThreadProcessId(IntPtr hWnd, out int lpdwProcessId);
+
+        [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+        static extern int GetWindowText(IntPtr hWnd, StringBuilder lpString, int nMaxCount);
+
+        [DllImport("user32.dll", CharSet = CharSet.Auto, SetLastError = true)]
+        static extern int GetWindowTextLength(IntPtr hWnd);
+
+        delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
+
+        [DllImport("user32.dll")]
+        static extern bool EnumWindows(EnumWindowsProc lpEnumFunc, IntPtr lParam);
+
+        [DllImport("dwmapi.dll")]
+        static extern int DwmGetWindowAttribute(IntPtr hwnd, int dwAttribute, out int pvAttribute, int cbAttribute);
+
+        [DllImport("user32.dll")]
+        static extern bool GetWindowRect(IntPtr hWnd, out RECT lpRect);
+
+        [DllImport("user32.dll")]
+        static extern IntPtr GetShellWindow();
+
+
 
 
 
         [StructLayout(LayoutKind.Sequential)]
         public struct RECT { public int Left, Top, Right, Bottom; }
 
-        private DateTime _idleStartTime;
-        private long _idleStartTotalTraffic = 0; // 记录开始空闲时的总流量
-
         private void TrackWindowActivity()
         {
-            // ===== 第一阶段：空闲与全屏排除逻辑 (Debug 修改点) =====
-
-            // 1. 获取最后一次输入时间（鼠标或键盘）
-            uint currentTick = (uint)Environment.TickCount;
-            LASTINPUTINFO lii = new LASTINPUTINFO();
-            lii.cbSize = (uint)Marshal.SizeOf(typeof(LASTINPUTINFO));
-            GetLastInputInfo(ref lii);
-
-            // 计算空闲毫秒数（处理 TickCount 溢出情况）
-            uint idleTimeMs = currentTick >= lii.dwTime ? currentTick - lii.dwTime : (uint.MaxValue - lii.dwTime + currentTick);
-            bool isInputIdle = idleTimeMs > 60000; // 1分钟不动定义为“不活动”
-
-            // 2. 检测是否处于全屏状态 (排除看视频、PPT、游戏等情况)
-            // QUNS_BUSY = 2, QUNS_RUNNING_D3D_FULL_SCREEN = 3, QUNS_PRESENTATION_MODE = 4, QUNS_ACCEPTS_NOTIFICATIONS = 5
-            SHQueryUserNotificationState(out int quns);
-            bool isUserBusyButNoInput = (quns >= 2 && quns <= 5);
-
-            // 逻辑判定：如果是输入空闲，但处于全屏视频/游戏模式，则依然视为“活跃”
-            bool currentlyIdle = isInputIdle && !isUserBusyButNoInput;
-
-            // 3. 处理状态切换日志
-            if (currentlyIdle)
-            {
-                if (!_isUserIdle)
-                {
-                    _isUserIdle = true;
-                    _idleStartTime = DateTime.Now;
-                    // 记录进入空闲时的总流量 (以当日总流量为准)
-                    _idleStartTotalTraffic = _savedData.DailyTraffic.GetValueOrDefault(DateTime.Today.ToString("yyyy-MM-dd"), 0);
-
-                    Application.Current.Dispatcher.InvokeAsync(() => {
-                        AddLogEvent("System", "暂停活动", "由于1分钟无操作且非全屏模式，停止计时。", "#888888");
-                    });
-                }
-                return; // ★ 重要：处于空闲状态，直接返回，不执行下面的时间累加逻辑
-            }
-            else
-            {
-                if (_isUserIdle)
-                {
-                    _isUserIdle = false;
-                    long currentTraffic = _savedData.DailyTraffic.GetValueOrDefault(DateTime.Today.ToString("yyyy-MM-dd"), 0);
-                    long trafficDiff = Math.Max(0, currentTraffic - _idleStartTotalTraffic);
-                    string duration = (DateTime.Now - _idleStartTime).ToString(@"hh\:mm\:ss");
-
-                    Application.Current.Dispatcher.InvokeAsync(() => {
-                        AddLogEvent("System", "恢复活动", $"结束空闲时长: {duration}，期间产生总流量: {FormatAdaptiveTotal((ulong)trafficDiff)}", "#32CD32");
-                    });
-                }
-            }
-
-            // ===== 第二阶段：原有的窗口统计逻辑 (仅在非空闲时执行) =====
-
             IntPtr foregroundHWnd = GetForegroundWindow();
-            IntPtr shellHWnd = GetShellWindow();
+            IntPtr shellHWnd = GetShellWindow(); // 获取系统壳程序窗口
             HashSet<string> secondaryApps = new HashSet<string>();
             string primaryApp = "";
 
             string todayStr = DateTime.Today.ToString("yyyy-MM-dd");
-            // 你的代码原本是小时+分钟作为Key，建议保留
             string timeKey = $"{todayStr}_{DateTime.Now.Hour:D2}{DateTime.Now.Minute:D2}";
 
-            // 初始化字典 (保持你原有的逻辑)
             if (!_savedData.HourlyPrimaryTime.ContainsKey(timeKey)) _savedData.HourlyPrimaryTime[timeKey] = new Dictionary<string, long>();
-            // ... 其他初始化字典代码同你提供的 ...
+            if (!_savedData.HourlySecondaryTime.ContainsKey(timeKey)) _savedData.HourlySecondaryTime[timeKey] = new Dictionary<string, long>();
+            if (!_savedData.HourlyBackgroundTime.ContainsKey(timeKey)) _savedData.HourlyBackgroundTime[timeKey] = new Dictionary<string, long>();
+
+            if (!_savedData.DailyAppActiveTime.ContainsKey(todayStr)) _savedData.DailyAppActiveTime[todayStr] = new Dictionary<string, long>();
+            if (!_savedData.DailyPrimaryTime.ContainsKey(todayStr)) _savedData.DailyPrimaryTime[todayStr] = new Dictionary<string, long>();
+            if (!_savedData.DailySecondaryTime.ContainsKey(todayStr)) _savedData.DailySecondaryTime[todayStr] = new Dictionary<string, long>();
+            if (!_savedData.DailyBackgroundTime.ContainsKey(todayStr)) _savedData.DailyBackgroundTime[todayStr] = new Dictionary<string, long>();
 
             // 1. 获取主活动窗口
             if (foregroundHWnd != IntPtr.Zero)
             {
                 GetWindowThreadProcessId(foregroundHWnd, out int fgPid);
-                EtwNetworkTracker.CurrentForegroundPid = fgPid;
+                EtwNetworkTracker.CurrentForegroundPid = fgPid; // ★ 核心：实时同步前台焦点 PID 供文件引擎判断
 
                 primaryApp = GetProcessNameFromHWnd(foregroundHWnd);
                 if (!string.IsNullOrEmpty(primaryApp))
                 {
-                    // 假设你的 Timer 间隔是 2 秒，所以加 2
                     _savedData.PrimaryWindowTimes[primaryApp] = _savedData.PrimaryWindowTimes.GetValueOrDefault(primaryApp, 0) + 2;
+                    // 将主活动窗口记入当日时间字典中（为热力图弹窗提供数据）
                     _savedData.DailyPrimaryTime[todayStr][primaryApp] = _savedData.DailyPrimaryTime[todayStr].GetValueOrDefault(primaryApp, 0) + 2;
+                    // 记录小时级数据
                     _savedData.HourlyPrimaryTime[timeKey][primaryApp] = _savedData.HourlyPrimaryTime[timeKey].GetValueOrDefault(primaryApp, 0) + 2;
+                    // 同步累加到总活跃时间字典
                     _savedData.DailyAppActiveTime[todayStr][primaryApp] = _savedData.DailyAppActiveTime[todayStr].GetValueOrDefault(primaryApp, 0) + 2;
                 }
             }
 
-            // 2. 次要窗口判定 (枚举并累加)
+            // 2. 次要窗口判定： Cloaked(隐形) 检查
             EnumWindows((hWnd, lParam) =>
             {
                 DwmGetWindowAttribute(hWnd, 14, out int isCloaked, 4);
+
                 GetWindowRect(hWnd, out RECT rect);
                 bool hasSize = (rect.Right - rect.Left > 0) && (rect.Bottom - rect.Top > 0);
 
@@ -4506,17 +4151,21 @@ namespace NetworkMonitor
                 _savedData.DailyAppActiveTime[todayStr][app] = _savedData.DailyAppActiveTime[todayStr].GetValueOrDefault(app, 0) + 2;
             }
 
-            // 3. 记录后台活动
+            // 3. 记录后台活动 (Background)
             var allProcesses = Process.GetProcesses();
             HashSet<string> uniqueBgApps = new HashSet<string>();
-            string[] systemExcludes = { "svchost", "RuntimeBroker", "dllhost", "conhost", "SearchHost", "SystemSettings", "sihost", "taskhostw", "explorer", "ApplicationFrameHost" };
 
             foreach (var p in allProcesses)
             {
                 try
                 {
                     string pName = p.ProcessName;
-                    if (pName != primaryApp && !secondaryApps.Contains(pName) && !systemExcludes.Contains(pName) && pName != "Idle" && pName != "System")
+                    string[] systemExcludes = { "svchost", "RuntimeBroker", "dllhost", "conhost", "SearchHost", "SystemSettings", "sihost", "taskhostw", "explorer", "ApplicationFrameHost" };
+
+                    if (pName != primaryApp &&
+                        !secondaryApps.Contains(pName) &&
+                        !systemExcludes.Contains(pName) &&
+                        pName != "Idle" && pName != "System")
                     {
                         uniqueBgApps.Add(pName);
                     }
@@ -4534,8 +4183,6 @@ namespace NetworkMonitor
 
             UpdateWindowActivityUI();
         }
-
-
 
         // 辅助方法：通过句柄获取进程名
         private string GetProcessNameFromHWnd(IntPtr hWnd)
@@ -4618,8 +4265,6 @@ namespace NetworkMonitor
             if (EditColorBgMain != null) EditColorBgMain.Text = _savedData.ColorBgMain;
             if (EditColorBgCard != null) EditColorBgCard.Text = _savedData.ColorBgCard;
             SliderFontSize.Value = _savedData.GlobalFontSize;
-            if (this.FindName("SliderScrollSpeed") is Slider spd) spd.Value = _savedData.ScrollSpeed;
-
 
             // 初始化预览色块颜色
             try
@@ -4631,12 +4276,7 @@ namespace NetworkMonitor
             }
             catch { /* 忽略格式错误 */ }
             if (this.FindName("ComboTooltipMode") is ComboBox cb) cb.SelectedIndex = MainWindow.TooltipMode;
-            // 在其下方新增：
-            if (this.FindName("ComboCloseAction") is ComboBox cbCloseAction)
-            {
-                // 0 = 最小化到托盘，1 = 完全退出
-                cbCloseAction.SelectedIndex = _savedData.MinimizeToTray ? 0 : 1;
-            }
+
 
         }
 
@@ -4688,51 +4328,10 @@ namespace NetworkMonitor
                 this.Resources[SystemColors.ControlTextBrushKey] = brushMainText;
                 this.Resources[SystemColors.HighlightBrushKey] = brushInputBg;   // 选中高亮背景
                 this.Resources[SystemColors.HighlightTextBrushKey] = brushMainText; // 选中高亮文字
-
-                ComboBox[] combos = {this.FindName("ComboTooltipMode") as ComboBox,this.FindName("ComboCloseAction") as ComboBox,this.FindName("TimeWindowCombo") as ComboBox};
-                foreach (var cb in combos)
-                {
-                    if (cb != null)
-                    {
-                        cb.Background = brushInputBg;
-                        cb.Foreground = brushMainText;
-                        cb.BorderBrush = brushBorder;
-                    }
-                }
-                DataGrid[] grids = { ProcessGrid, GridPrimary, GridSecondary, GridBackground,this.FindName("GridAppDistribution") as DataGrid,this.FindName("GridAppLogs") as DataGrid,this.FindName("GridFileLogs") as DataGrid };
-                foreach (var grid in grids)
-                {
-                    if (grid != null)
-                    {
-                        VirtualizingPanel.SetScrollUnit(grid, ScrollUnit.Pixel);
-                        grid.Background = Brushes.Transparent;
-                        grid.RowBackground = brushBgCard;
-                        grid.AlternatingRowBackground = brushBgMain;
-                        grid.Foreground = brushMainText;
-                        grid.HorizontalGridLinesBrush = brushBorder;
-                        grid.VerticalGridLinesBrush = brushBorder;
-                        grid.BorderBrush = brushBorder;
-                    }
-                }
-
                 // 主题切换时，通知日志侧边栏的所有文字立刻更新颜色
                 foreach (var cat in _logCategories) cat.NotifyColorChange();
                 // 核显式强制转换以解决 CS0266
-                // 3. 实时更新持久化数据并应用到全局 UI
-                _savedData.ColorDown = EditColorDown.Text;
-                _savedData.ColorUp = EditColorUp.Text;
-                _savedData.ColorCpu = EditColorCpu.Text;
-                _savedData.ColorRam = EditColorRam.Text;
-                if (EditColorBgMain != null) _savedData.ColorBgMain = EditColorBgMain.Text;
-                if (EditColorBgCard != null) _savedData.ColorBgCard = EditColorBgCard.Text;
-                _savedData.GlobalFontSize = SliderFontSize.Value;
-                if (this.FindName("SliderScrollSpeed") is Slider spd) _savedData.ScrollSpeed = spd.Value;
-                // 修复重启后，上次未关闭的软件状态卡在"运行中"的问题
-
-                ApplyTheme(); // 实时应用替换所有模块元素
-
                 TxtDown.Foreground = brushDown;
-
                 TxtUp.Foreground = brushUp;
                 PolyDown.Stroke = brushDown;
                 PolyDown.Fill = new SolidColorBrush(Color.FromArgb(21, brushDown.Color.R, brushDown.Color.G, brushDown.Color.B));
@@ -4812,40 +4411,7 @@ namespace NetworkMonitor
                 _savedData.TooltipMode = cb.SelectedIndex;
                 MainWindow.TooltipMode = cb.SelectedIndex;
             }
-            if (this.FindName("ComboCloseAction") is ComboBox cbCloseAction)
-            {
-                // 0 = 最小化到托盘，1 = 完全退出
-                cbCloseAction.SelectedIndex = _savedData.MinimizeToTray ? 0 : 1;
-            }
 
-            // 隐藏保存按钮，实现无感实时应用
-            if (this.FindName("BtnSaveTheme") is Button btnSaveTheme)
-                btnSaveTheme.Visibility = Visibility.Collapsed;
-            else
-            {
-                // 模糊查找隐藏
-                Application.Current.Dispatcher.InvokeAsync(() => {
-                    var allBtns = FindVisualChildren<Button>(this);
-                    foreach (var b in allBtns)
-                    {
-                        if (b.Content?.ToString().Contains("保存并应用") == true)
-                            b.Visibility = Visibility.Collapsed;
-                    }
-                });
-            }
-
-        }
-        private static IEnumerable<T> FindVisualChildren<T>(DependencyObject depObj) where T : DependencyObject
-        {
-            if (depObj != null)
-            {
-                for (int i = 0; i < VisualTreeHelper.GetChildrenCount(depObj); i++)
-                {
-                    DependencyObject child = VisualTreeHelper.GetChild(depObj, i);
-                    if (child != null && child is T t) yield return t;
-                    foreach (T childOfChild in FindVisualChildren<T>(child)) yield return childOfChild;
-                }
-            }
         }
         // 1. 可视化选色器逻辑
         private void PickColor_Click(object sender, RoutedEventArgs e)
@@ -5311,15 +4877,7 @@ namespace NetworkMonitor
             var innerScrollViewer = FindVisualChild<ScrollViewer>(sender as DependencyObject);
             if (innerScrollViewer != null)
             {
-                // ★ 修复 3 (核心)：强制将内部嵌套表格的滚动模式设为“像素级(Pixel)”
-                if (sender is DependencyObject dObj && VirtualizingPanel.GetScrollUnit(dObj) != ScrollUnit.Pixel)
-                {
-                    VirtualizingPanel.SetScrollUnit(dObj, ScrollUnit.Pixel);
-                }
-
-                // 应用全局配置的滚动速度倍率
-                double delta = e.Delta * Math.Max(0.2, _savedData.ScrollSpeed);
-
+                double delta = e.Delta;
                 // 增加容差，防止高分屏下小数点计算导致的边界判定失效
                 bool isAtTop = innerScrollViewer.VerticalOffset <= 2.0;
                 bool isAtBottom = innerScrollViewer.VerticalOffset >= (innerScrollViewer.ScrollableHeight - 2.0);
@@ -5341,7 +4899,7 @@ namespace NetworkMonitor
                     return;
                 }
 
-                // 正常内部按像素平滑滚动
+                // 正常内部滚动
                 innerScrollViewer.ScrollToVerticalOffset(innerScrollViewer.VerticalOffset - delta);
                 e.Handled = true;
             }
@@ -5445,28 +5003,6 @@ namespace NetworkMonitor
                 }
             }
         }
-        private void Settings_SelectionChanged(object sender, SelectionChangedEventArgs e)
-        {
-            if (_savedData == null || !this.IsLoaded) return; // 防止初始化时误触发
-
-            if (this.FindName("ComboTooltipMode") is ComboBox cbMode && cbMode.SelectedIndex >= 0)
-            {
-                _savedData.TooltipMode = cbMode.SelectedIndex;
-                MainWindow.TooltipMode = cbMode.SelectedIndex;
-            }
-
-            if (this.FindName("ComboCloseAction") is ComboBox cbClose && cbClose.SelectedIndex >= 0)
-            {
-                _savedData.MinimizeToTray = cbClose.SelectedIndex == 0;
-            }
-
-            // 实时保存并刷新 UI
-            SaveData();
-        }
-
-
-
-
         // 扫描器模型数据绑定
 
         private ObservableCollection<ScannerInterface> _scannerInterfaces = new ObservableCollection<ScannerInterface>();
@@ -5585,18 +5121,6 @@ namespace NetworkMonitor
         private async void BtnScan_Click(object sender, RoutedEventArgs e)
         {
             if (_isScanning) return;
-
-            // ★ Build and show the protocol parameters alert before scanning
-            var scanParamsMsg = new StringBuilder("即将使用以下配置进行深度扫描：\n\n");
-            scanParamsMsg.AppendLine($"并发线程数: {_savedData.ScannerThreads}\n");
-            scanParamsMsg.AppendLine("启用的探测协议:");
-            if (_savedData.ScannerUseDHCP) scanParamsMsg.AppendLine("✅ DHCP (发现动态分配IP的设备，如手机、普通电脑)");
-            if (_savedData.ScannerUseSNMP) scanParamsMsg.AppendLine("✅ SNMP (发现网络打印机、路由器、交换机等网络设备)");
-            if (_savedData.ScannerUseMDNS) scanParamsMsg.AppendLine("✅ MDNS (发现苹果设备、智能家居、投屏设备等)");
-            if (_savedData.ScannerUseSSDP) scanParamsMsg.AppendLine("✅ SSDP (发现UPnP设备，如智能电视、NAS存储、监控摄像头)");
-
-            MessageBox.Show(scanParamsMsg.ToString(), "扫描参数确认", MessageBoxButton.OK, MessageBoxImage.Information);
-
             _isScanning = true;
             if (this.FindName("BtnScan") is Button btnScan) btnScan.Content = "⏳ 正在深度扫描...";
 
@@ -5605,12 +5129,12 @@ namespace NetworkMonitor
 
             int maxThreads = _savedData.ScannerThreads > 0 ? _savedData.ScannerThreads : 32;
             using var semaphore = new SemaphoreSlim(maxThreads);
+
             var interfaces = NetworkInterface.GetAllNetworkInterfaces()
-                            .Where(n => n.OperationalStatus == OperationalStatus.Up && n.NetworkInterfaceType != NetworkInterfaceType.Loopback)
-                            .ToList();
+                .Where(n => n.OperationalStatus == OperationalStatus.Up && n.NetworkInterfaceType != NetworkInterfaceType.Loopback)
+                .ToList();
 
             var pingTasks = new List<Task>();
-            var pingSuccessIps = new ConcurrentDictionary<string, bool>(); // 新增：记录真实回应 Ping 的 IP
 
             await Task.Run(() => {
                 foreach (var ni in interfaces)
@@ -5647,8 +5171,7 @@ namespace NetworkMonitor
                                     try
                                     {
                                         using var ping = new Ping();
-                                        var reply = await ping.SendPingAsync(targetIp, 800);
-                                        if (reply.Status == IPStatus.Success) pingSuccessIps[targetIp] = true; // 新增：拦截回应结果
+                                        await ping.SendPingAsync(targetIp, 800);
                                     }
                                     catch { }
                                     finally { semaphore.Release(); }
@@ -5669,7 +5192,7 @@ namespace NetworkMonitor
             await Task.WhenAll(pingTasks);
 
             // 解析已通过以上操作自动收割满战利品的 ARP 缓存表
-            ProcessArpTable(interfaces, pingSuccessIps); // 修改：将存活清单传递进去
+            ProcessArpTable(interfaces);
 
             _isScanning = false;
             if (this.FindName("BtnScan") is Button b) b.Content = "🔄 一键深度扫描";
@@ -5689,7 +5212,7 @@ namespace NetworkMonitor
             });
         }
 
-        private void ProcessArpTable(IEnumerable<NetworkInterface> interfaces, ConcurrentDictionary<string, bool> pingSuccessIps = null)
+        private void ProcessArpTable(IEnumerable<NetworkInterface> interfaces)
         {
             uint bytesNeeded = 0;
             if (GetIpNetTable(IntPtr.Zero, ref bytesNeeded, false) == 122 && bytesNeeded > 0)
@@ -5723,13 +5246,8 @@ namespace NetworkMonitor
                                 else
                                 {
                                     _savedData.ScannerHistory[mac].IP = ip;
+                                    _savedData.ScannerHistory[mac].LastSeenTime = DateTime.Now;
                                     _savedData.ScannerHistory[mac].Index = row.dwIndex;
-
-                                    // 仅当 Ping 真实回应时才刷新存活时间，过滤掉 ARP 缓存中的离线死设备
-                                    if (pingSuccessIps != null && pingSuccessIps.ContainsKey(ip))
-                                    {
-                                        _savedData.ScannerHistory[mac].LastSeenTime = DateTime.Now;
-                                    }
                                 }
                             }
                             currentBuffer = new IntPtr(currentBuffer.ToInt64() + Marshal.SizeOf<MIB_IPNETROW>());
@@ -5861,7 +5379,9 @@ namespace NetworkMonitor
     }
 
 
-    public class TcpConnection { public IPAddress? RemoteAddress { get; set; } public ushort RemotePort { get; set; } public uint State { get; set; } public int ProcessId { get; set; } }
+
+
+public class TcpConnection { public IPAddress? RemoteAddress { get; set; } public ushort RemotePort { get; set; } public uint State { get; set; } public int ProcessId { get; set; } }
 
 
 

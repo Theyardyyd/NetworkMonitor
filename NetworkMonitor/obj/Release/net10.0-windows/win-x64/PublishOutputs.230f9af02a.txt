@@ -1,2 +1,0 @@
-A:\Code\NetworkMonitor\NetworkMonitor\bin\Release\net10.0-windows\publish\win-x64\NetworkMonitor.pdb
-A:\Code\NetworkMonitor\NetworkMonitor\bin\Release\net10.0-windows\publish\win-x64\NetworkMonitor.exe

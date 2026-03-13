@@ -18,6 +18,8 @@ namespace NetworkMonitor
         // 使用线程安全的字典来记录每个 PID 的纯网络流量 (Bytes)
         public static ConcurrentDictionary<int, ulong> ProcessDownloadBytes = new ConcurrentDictionary<int, ulong>();
         public static ConcurrentDictionary<int, ulong> ProcessUploadBytes = new ConcurrentDictionary<int, ulong>();
+        // 新增：高精度 ETW IP 捕获缓存，避免瞬间断开的 HTTP 请求被遗漏
+        public static ConcurrentDictionary<int, ConcurrentDictionary<string, byte>> ProcessActiveIPs = new ConcurrentDictionary<int, ConcurrentDictionary<string, byte>>();
         public static ulong GlobalLanDownloadBytes = 0;
         public static ulong GlobalLanUploadBytes = 0;
         private static TraceEventSession _session;
@@ -92,8 +94,12 @@ namespace NetworkMonitor
                                 targetPid = realPid;
                             }
 
-                            if (isUpload) ProcessUploadBytes.AddOrUpdate(targetPid, size, (id, old) => old + size);
                             else ProcessDownloadBytes.AddOrUpdate(targetPid, size, (id, old) => old + size);
+
+                            // 捕获瞬时 IP
+                            if (!ProcessActiveIPs.ContainsKey(targetPid)) ProcessActiveIPs[targetPid] = new ConcurrentDictionary<string, byte>();
+                            ProcessActiveIPs[targetPid][remoteIp] = 1;
+
                             if (IsLanIP(remoteIp))
                             {
                                 if (isUpload) Interlocked.Add(ref GlobalLanUploadBytes, size);
