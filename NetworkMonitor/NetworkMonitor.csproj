@@ -1,0 +1,33 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+	<PropertyGroup>
+		<OutputType>WinExe</OutputType>
+		<TargetFramework>net10.0-windows</TargetFramework>
+		<Nullable>enable</Nullable>
+		<UseWPF>true</UseWPF>
+		<ApplicationIcon>logo.ico</ApplicationIcon>
+		<!-- 使用系统托盘 -->
+		<UseWindowsForms>true</UseWindowsForms>
+		<ApplicationManifest>app.manifest</ApplicationManifest>
+	</PropertyGroup>
+	<ItemGroup>
+	  <None Remove="earth_map.jpg" />
+	  <None Remove="earth_map.png" />
+	  <None Remove="logo.ico" />
+	  <None Remove="logo_thick.ico" />
+	</ItemGroup>
+	<ItemGroup>
+	  <PackageReference Include="Microsoft.Diagnostics.Tracing.TraceEvent" Version="3.1.30" />
+	</ItemGroup>
+	<ItemGroup>
+	  <Resource Include="earth_map.jpg" />
+	  <Resource Include="earth_map.png" />
+	  <Resource Include="logo.ico">
+	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	  </Resource>
+	</ItemGroup>
+	<ItemGroup>
+	  <None Update="logo_with_text.ico">
+	    <CopyToOutputDirectory>Never</CopyToOutputDirectory>
+	  </None>
+	</ItemGroup>
+</Project>
