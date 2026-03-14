@@ -710,7 +710,13 @@ namespace NetworkMonitor
             }
 
             InitializeComponent();
-
+            // ★ BugFix 2: 提升隐式样式作用域，解决 ToolTip 等弹窗控件脱离窗口视觉树导致不随主题变色的问题
+            if (Application.Current != null)
+            {
+                Application.Current.Resources[typeof(ToolTip)] = this.Resources[typeof(ToolTip)];
+                Application.Current.Resources[typeof(ComboBoxItem)] = this.Resources[typeof(ComboBoxItem)];
+                Application.Current.Resources[typeof(System.Windows.Controls.Primitives.DataGridColumnHeader)] = this.Resources[typeof(System.Windows.Controls.Primitives.DataGridColumnHeader)];
+            }
             // 安全设置窗口图标 ---
             SetWindowIconSafely();
             // 实例化磁盘性能计数器
@@ -849,6 +855,16 @@ namespace NetworkMonitor
 
             try
             {
+
+                // ★ 新增：即点即用，直接写入实时配置对象
+                _savedData.ColorDown = EditColorDown.Text;
+                _savedData.ColorUp = EditColorUp.Text;
+                _savedData.ColorCpu = EditColorCpu.Text;
+                _savedData.ColorRam = EditColorRam.Text;
+                if (EditColorBgMain != null) _savedData.ColorBgMain = EditColorBgMain.Text;
+                if (EditColorBgCard != null) _savedData.ColorBgCard = EditColorBgCard.Text;
+                _savedData.GlobalFontSize = SliderFontSize.Value;
+
                 var brushDown = new SolidColorBrush((Color)ColorConverter.ConvertFromString(EditColorDown.Text));
                 var brushUp = new SolidColorBrush((Color)ColorConverter.ConvertFromString(EditColorUp.Text));
                 var brushCpu = new SolidColorBrush((Color)ColorConverter.ConvertFromString(EditColorCpu.Text));
@@ -892,9 +908,20 @@ namespace NetworkMonitor
                 LineCpu.Stroke = brushCpu;
                 LineRam.Stroke = brushRam;
                 this.FontSize = previewSize;
-
+                // ★ 触发全局样式更新，抛弃手动保存按钮
+                ApplyTheme();
             }
             catch { /* 忽略非法 HEX */ }
+        }
+        // ★ 新增：悬停解释模式即点即用
+        private void ComboTooltipMode_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (!IsLoaded) return;
+            if (sender is ComboBox cb)
+            {
+                _savedData.TooltipMode = cb.SelectedIndex;
+                MainWindow.TooltipMode = cb.SelectedIndex;
+            }
         }
         private void ThemePreset_Click(object sender, RoutedEventArgs e)
         {
@@ -3395,6 +3422,12 @@ namespace NetworkMonitor
                         HashSet<string> targetProcesses = new HashSet<string>(pAggs.Keys);
                         DateTime now = DateTime.Now;
                         Dictionary<string, long> windowTotals = new Dictionary<string, long>();
+
+                        // ★ 修复 BUG 3：根据用户拉拽选择的窗口范围（或默认完整时间），精确提取流量
+                        double windowSec = _currentViewMode;
+                        DateTime selectionEnd = now.AddSeconds(-windowSec * _selectedTimeStartRatio);
+                        DateTime selectionStart = now.AddSeconds(-windowSec * _selectedTimeEndRatio);
+
                         // ★ 根据用户选择的下拉时间窗口，动态提取时间切片内的历史流量
                         if (_currentViewMode <= 86400) // 24小时以内查分钟级日志
                         {
@@ -4536,37 +4569,6 @@ namespace NetworkMonitor
         }
 
         // ★ v0.5：保存按钮事件
-        private void BtnSaveTheme_Click(object sender, RoutedEventArgs e)
-        {
-            _savedData.ColorDown = EditColorDown.Text;
-            _savedData.ColorUp = EditColorUp.Text;
-            _savedData.ColorCpu = EditColorCpu.Text;
-            _savedData.ColorRam = EditColorRam.Text;
-
-            if (EditColorBgMain != null) _savedData.ColorBgMain = EditColorBgMain.Text;
-            if (EditColorBgCard != null) _savedData.ColorBgCard = EditColorBgCard.Text;
-            _savedData.GlobalFontSize = SliderFontSize.Value;
-            // 修复重启后，上次未关闭的软件状态卡在"运行中"的问题
-            foreach (var session in _savedData.AppSessions.Where(s => !s.EndTime.HasValue))
-            {
-                session.EndTime = _savedData.LastSavedTime;
-            }
-
-            _uiAppLogs = new ObservableCollection<AppSessionInfo>(_savedData.AppSessions);
-            if (this.FindName("GridAppLogs") is DataGrid logsGrid) logsGrid.ItemsSource = _uiAppLogs;
-            if (this.FindName("ListSnapshotApps") is ListBox snapBox) snapBox.ItemsSource = _uiSnapshotApps;
-            if (this.FindName("TxtSnapshotTime") is TextBox txtTime) txtTime.Text = DateTime.Now.ToString("HH:mm:ss");
-            ApplyTheme();
-            SaveData();
-            MessageBox.Show("主题设置已保存并实时应用！", "主题同步", MessageBoxButton.OK, MessageBoxImage.Information);
-            if (this.FindName("ComboTooltipMode") is ComboBox cb)
-            {
-                _savedData.TooltipMode = cb.SelectedIndex;
-                MainWindow.TooltipMode = cb.SelectedIndex;
-            }
-
-        }
-        // 1. 可视化选色器逻辑
         private void PickColor_Click(object sender, RoutedEventArgs e)
         {
             if (sender is Button btn)

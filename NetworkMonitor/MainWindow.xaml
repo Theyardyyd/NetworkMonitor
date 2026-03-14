@@ -82,7 +82,16 @@
             <Setter Property="Foreground" Value="{DynamicResource TextMainBrush}"/>
             <Setter Property="BorderBrush" Value="{DynamicResource BorderMainBrush}"/>
         </Style>
-        <Style TargetType="ScrollBar">
+
+        <Style TargetType="DataGridColumnHeader">
+            <Setter Property="Background" Value="{DynamicResource BgNavBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextDimBrush}"/>
+            <Setter Property="Padding" Value="10,6"/>
+            <Setter Property="BorderThickness" Value="0,0,1,1"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderMainBrush}"/>
+        </Style>
+
+            <Style TargetType="ScrollBar">
             <Setter Property="Background" Value="{DynamicResource BgMainBrush}"/>
             <Setter Property="BorderBrush" Value="{DynamicResource BorderMainBrush}"/>
             <Setter Property="Template">
@@ -535,7 +544,7 @@
 
                                 <Grid Grid.Row="1" Margin="0,5,0,0">
                                     <TextBlock x:Name="TxtDonutLoading" Text="⏳ 正在分析流量数据，请稍候..." Visibility="Visible" Foreground="{DynamicResource TextDimBrush}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                    <Canvas x:Name="DonutCanvas" Background="Transparent"/>
+                                    <Canvas x:Name="DonutCanvas" Background="Transparent" MouseMove="DonutCanvas_MouseMove" MouseLeave="DonutCanvas_MouseLeave"/>
 
                                     <Border Visibility="{Binding Visibility, ElementName=GridAppDistribution}" BorderThickness="1" BorderBrush="{DynamicResource BorderMainBrush}" CornerRadius="4" ClipToBounds="True" Margin="0,10,0,0">
                                         <DataGrid x:Name="GridAppDistribution" Visibility="Collapsed" AutoGenerateColumns="False" Background="Transparent" Foreground="{DynamicResource TextMainBrush}" HeadersVisibility="None" RowBackground="Transparent" GridLinesVisibility="Horizontal" HorizontalGridLinesBrush="{DynamicResource BorderMainBrush}" BorderThickness="0" IsReadOnly="True" ScrollViewer.VerticalScrollBarVisibility="Auto">
@@ -1316,7 +1325,7 @@
                                 <CheckBox x:Name="ChkShowBat" Content="电量 (Bat)" Foreground="{DynamicResource TextMainBrush}" Checked="ResToggle_Changed" Unchecked="ResToggle_Changed"/>
                             </StackPanel>
                             <TextBlock Text="悬停进程解释显示 (Hover Tooltip):" Foreground="{DynamicResource TextDimBrush}"/>
-                            <ComboBox x:Name="ComboTooltipMode" Width="220" HorizontalAlignment="Left" Background="{DynamicResource BgInputBrush}" Foreground="{DynamicResource TextMainBrush}" BorderBrush="{DynamicResource BorderMainBrush}" BorderThickness="1" Margin="0,5,0,20">
+                            <ComboBox x:Name="ComboTooltipMode" Width="220" HorizontalAlignment="Left" Background="{DynamicResource BgInputBrush}" Foreground="{DynamicResource TextMainBrush}" BorderBrush="{DynamicResource BorderMainBrush}" BorderThickness="1" Margin="0,5,0,20" SelectionChanged="ComboTooltipMode_SelectionChanged">
                                 <ComboBoxItem Content="不显示解释" Tag="0"/>
                                 <ComboBoxItem Content="仅显示进程名称" Tag="1"/>
                                 <ComboBoxItem Content="显示名称与具体描述" Tag="2"/>
@@ -1419,7 +1428,6 @@
                                     </DockPanel>
                                 </StackPanel>
                             </Grid>
-                            <Button Content="💾 保存并应用" Padding="20,10" Background="{DynamicResource BgNavBrush}" Foreground="{DynamicResource TextMainBrush}" BorderBrush="#00E5FF" BorderThickness="1" FontWeight="Bold" Click="BtnSaveTheme_Click" Margin="0,20,0,0"/>
 
                             <TextBlock Text="💾 数据管理 (Data Management)" Foreground="{DynamicResource TextMainBrush}" FontSize="20" FontWeight="Bold" Margin="0,35,0,10"/>
                             <Border Background="{DynamicResource BgNavBrush}" BorderBrush="Transparent" BorderThickness="1" CornerRadius="6" Padding="20" Margin="0,0,0,20">
