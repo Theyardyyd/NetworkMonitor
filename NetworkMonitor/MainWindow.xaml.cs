@@ -1057,22 +1057,22 @@ namespace NetworkMonitor
             var menu = new Forms.ContextMenuStrip();
             menu.Items.Add("显示主面板", null, (s, e) => ShowWindow());
 
-            var autoStartItem = new Forms.ToolStripMenuItem("开机自启 (注册表)");
+            var autoStartItem = new Forms.ToolStripMenuItem("开机自启");
             autoStartItem.CheckOnClick = true;
             autoStartItem.Checked = CheckAutoStart();
             autoStartItem.CheckedChanged += (s, e) => ToggleAutoStart(autoStartItem.Checked);
             menu.Items.Add(autoStartItem);
 
+            menu.Items.Add("显示桌面悬浮窗", null, (s, e) => {
+                if (_miniWindow == null) _miniWindow = new MiniWindow(this);
+                _miniWindow.Show();
+            });
             menu.Items.Add("完全退出", null, (s, e) => {
                 _isRealExit = true;
                 SaveData();
                 _trayIcon.Visible = false;
                 _trayIcon.Dispose();
                 Application.Current.Shutdown();
-            });
-            menu.Items.Add("显示桌面悬浮窗", null, (s, e) => {
-                if (_miniWindow == null) _miniWindow = new MiniWindow(this);
-                _miniWindow.Show();
             });
             _trayIcon.ContextMenuStrip = menu;
 
@@ -1760,8 +1760,11 @@ namespace NetworkMonitor
                 if (barH < 1 && val > 0) barH = 1;
 
                 Rectangle r = new Rectangle { Width = Math.Max(1, barWidth), Height = Math.Max(1, barH), Fill = new SolidColorBrush(Color.FromRgb(0, 229, 255)), RadiusX = 1, RadiusY = 1, Opacity = 0.8 };
-                SetQuickToolTip(r, $"{i}:00 - {i + 1}:00\n活跃度: {val}");
-                double displayVal = Math.Round((double)val, 0);
+
+                // ★ 修复 Bug 2：底层数据为秒级，强制转换为分钟保留一位小数
+                double displayVal = Math.Round((double)val / 60.0, 1);
+                SetQuickToolTip(r, $"{i:00}:00 - {i + 1:00}:00\n活跃度: {displayVal} 分钟");
+
                 r.ToolTip = new ToolTip
                 {
                     Content = $"{i:00}:00 - {i + 1:00}:00\n累计运行: {displayVal} 分钟",
@@ -2894,6 +2897,12 @@ namespace NetworkMonitor
                     marker = border;
                 }
 
+                // ★ 修复 Bug 1：动态更新已存在事件矩形的高度，防止外部容器拉伸或收缩时出现截断
+                if (marker is FrameworkElement fe)
+                {
+                    fe.Height = h;
+                }
+
                 // 更新 X 轴坐标 (纵向条贯穿整个图表，贴着顶部Y=0)
                 Canvas.SetLeft(marker, x - 4);
                 Canvas.SetTop(marker, 0);
@@ -2913,9 +2922,9 @@ namespace NetworkMonitor
             // 2. 小时活跃度计算 (热力图)
             if (!_savedData.DailyHourlyActive.ContainsKey(today)) _savedData.DailyHourlyActive[today] = new Dictionary<int, long>();
             int hour = DateTime.Now.Hour;
-            if (cpu > 5 || _targetDownSpeed > 1024)
+            // ★ 修复 Bug 2：活跃时段分布不再粗暴累加，仅在鼠标键盘有物理交互时才计入，避免累加值溢出或失真
+            if (!_isCurrentlyInactive)
                 _savedData.DailyHourlyActive[today][hour] = _savedData.DailyHourlyActive[today].GetValueOrDefault(hour, 0) + 2;
-
             // ★ 修复 1 & 3: 24h 波动记录 (每0.25h / 15分钟一段 = 每天 96 段)
             if (!_savedData.DailyResourceHistory.ContainsKey(today)) _savedData.DailyResourceHistory[today] = new Dictionary<int, ResourceSnap>();
             int timeSlot = DateTime.Now.Hour * 60 + DateTime.Now.Minute;
