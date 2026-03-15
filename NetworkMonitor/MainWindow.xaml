@@ -1,7 +1,7 @@
 ﻿<Window x:Class="NetworkMonitor.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="System DashBoard v1.8.6" Height="720" Width="1100" 
+        Title="System DashBoard v1.8.9" Height="720" Width="1100" 
         Background="{DynamicResource BgMainBrush}" 
         WindowStartupLocation="CenterScreen">
     <Window.Resources>
@@ -289,12 +289,18 @@
                         <DataGrid x:Name="ProcessGrid" LoadingRowDetails="ProcessGrid_LoadingRowDetails" AutoGenerateColumns="False" Background="{DynamicResource BgMainBrush}" RowBackground="{DynamicResource BgNavBrush}" Foreground="{DynamicResource TextDimBrush}" HeadersVisibility="Column" RowDetailsVisibilityMode="VisibleWhenSelected" ScrollViewer.CanContentScroll="False">
                             <DataGrid.Columns>
                             <DataGridTextColumn Header="进程名称" Binding="{Binding DisplayName, Mode=OneWay}" Width="200" FontWeight="Bold">
-                                <DataGridTextColumn.ElementStyle>
-                                    <Style TargetType="TextBlock">
-                                        <Setter Property="ToolTip" Value="{Binding ToolTipText, Mode=OneWay}"/>
-                                    </Style>
-                                </DataGridTextColumn.ElementStyle>
-                            </DataGridTextColumn>
+                                    <DataGridTextColumn.ElementStyle>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="ToolTip">
+                                                <Setter.Value>
+                                                    <ToolTip Background="{DynamicResource BgCardBrush}" Foreground="{DynamicResource TextMainBrush}" BorderBrush="{DynamicResource BorderMainBrush}" BorderThickness="1">
+                                                        <TextBlock Text="{Binding ToolTipText}" />
+                                                    </ToolTip>
+                                                </Setter.Value>
+                                            </Setter>
+                                        </Style>
+                                    </DataGridTextColumn.ElementStyle>
+                                </DataGridTextColumn>
                             <DataGridTextColumn Header="▼ 下载总量" Binding="{Binding DownloadDisplay}" SortMemberPath="RawDownload" Width="120" Foreground="#FF2277"/>
                             <DataGridTextColumn Header="▲ 上传总量" Binding="{Binding UploadDisplay}" SortMemberPath="RawUpload" Width="120" Foreground="#00E5FF"/>
                             <DataGridTextColumn Header="IP连接数" Binding="{Binding ConnectionCount}" Width="80"/>
@@ -592,7 +598,13 @@
                                                 <DataGridTextColumn Binding="{Binding Name}" Width="*">
                                                     <DataGridTextColumn.ElementStyle>
                                                         <Style TargetType="TextBlock">
-                                                            <Setter Property="ToolTip" Value="{Binding ToolTipText}"/>
+                                                            <Setter Property="ToolTip">
+                                                                <Setter.Value>
+                                                                    <ToolTip Background="{DynamicResource BgCardBrush}" Foreground="{DynamicResource TextMainBrush}" BorderBrush="{DynamicResource BorderMainBrush}" BorderThickness="1">
+                                                                        <TextBlock Text="{Binding ToolTipText}" />
+                                                                    </ToolTip>
+                                                                </Setter.Value>
+                                                            </Setter>
                                                         </Style>
                                                     </DataGridTextColumn.ElementStyle>
                                                 </DataGridTextColumn>
@@ -661,7 +673,13 @@
                                                     <DataGridTextColumn Binding="{Binding Name, Mode=OneWay}" Width="*">
                                                         <DataGridTextColumn.ElementStyle>
                                                             <Style TargetType="TextBlock">
-                                                                <Setter Property="ToolTip" Value="{Binding ToolTipText}"/>
+                                                                <Setter Property="ToolTip">
+                                                                    <Setter.Value>
+                                                                        <ToolTip Background="{DynamicResource BgCardBrush}" Foreground="{DynamicResource TextMainBrush}" BorderBrush="{DynamicResource BorderMainBrush}" BorderThickness="1">
+                                                                            <TextBlock Text="{Binding ToolTipText}" />
+                                                                        </ToolTip>
+                                                                    </Setter.Value>
+                                                                </Setter>
                                                             </Style>
                                                         </DataGridTextColumn.ElementStyle>
                                                     </DataGridTextColumn>
@@ -712,9 +730,16 @@
                                                     <DataGridTextColumn Binding="{Binding Name, Mode=OneWay}" Width="*">
                                                         <DataGridTextColumn.ElementStyle>
                                                             <Style TargetType="TextBlock">
-                                                                <Setter Property="ToolTip" Value="{Binding ToolTipText}"/>
+                                                                <Setter Property="ToolTip">
+                                                                    <Setter.Value>
+                                                                        <ToolTip Background="{DynamicResource BgCardBrush}" Foreground="{DynamicResource TextMainBrush}" BorderBrush="{DynamicResource BorderMainBrush}" BorderThickness="1">
+                                                                            <TextBlock Text="{Binding ToolTipText}" />
+                                                                        </ToolTip>
+                                                                    </Setter.Value>
+                                                                </Setter>
                                                             </Style>
                                                         </DataGridTextColumn.ElementStyle>
+                                                        
                                                     </DataGridTextColumn>
                                                     <DataGridTemplateColumn Width="110">
                                                         <DataGridTemplateColumn.CellTemplate>
@@ -763,9 +788,16 @@
                                                     <DataGridTextColumn Binding="{Binding Name, Mode=OneWay}" Width="*">
                                                         <DataGridTextColumn.ElementStyle>
                                                             <Style TargetType="TextBlock">
-                                                                <Setter Property="ToolTip" Value="{Binding ToolTipText}"/>
+                                                                <Setter Property="ToolTip">
+                                                                    <Setter.Value>
+                                                                        <ToolTip Background="{DynamicResource BgCardBrush}" Foreground="{DynamicResource TextMainBrush}" BorderBrush="{DynamicResource BorderMainBrush}" BorderThickness="1">
+                                                                            <TextBlock Text="{Binding ToolTipText}" />
+                                                                        </ToolTip>
+                                                                    </Setter.Value>
+                                                                </Setter>
                                                             </Style>
                                                         </DataGridTextColumn.ElementStyle>
+                                                        
                                                     </DataGridTextColumn>
                                                     <DataGridTemplateColumn Width="110">
                                                         <DataGridTemplateColumn.CellTemplate>
@@ -930,7 +962,13 @@
                                                 <Image Source="{Binding Icon}" Width="28" Height="28" Margin="0,0,15,0"/>
                                                 <StackPanel>
                                                     <StackPanel Orientation="Horizontal">
-                                                        <TextBlock Text="{Binding ProcessName}" Foreground="{DynamicResource TextMainBrush}" FontWeight="Bold" FontSize="15" ToolTip="{Binding ToolTipText}"/>
+                                                        <TextBlock Text="{Binding ProcessName}" Foreground="{DynamicResource TextMainBrush}" FontWeight="Bold" FontSize="15">
+                                                            <TextBlock.ToolTip>
+                                                                <ToolTip Background="{DynamicResource BgCardBrush}" Foreground="{DynamicResource TextMainBrush}" BorderBrush="{DynamicResource BorderMainBrush}" BorderThickness="1">
+                                                                    <TextBlock Text="{Binding ToolTipText}" />
+                                                                </ToolTip>
+                                                            </TextBlock.ToolTip>
+                                                        </TextBlock>
                                                         <Border Background="{DynamicResource BgCardBrush}" CornerRadius="4" Padding="6,1" Margin="10,0,0,0">
                                                             <TextBlock Text="{Binding StatusText}" Foreground="{Binding StatusColorBrush}" FontSize="11"/>
                                                         </Border>
@@ -1036,13 +1074,28 @@
                                                     <Image Source="{Binding Icon}" Width="26" Height="26" Margin="0,0,15,0"/>
                                                     <StackPanel>
                                                         <StackPanel Orientation="Horizontal">
-                                                            <TextBlock Text="{Binding ProcessName}" Foreground="{DynamicResource TextMainBrush}" FontWeight="Bold" FontSize="14" ToolTip="{Binding ToolTipText}"/>
+                                                            <TextBlock Text="{Binding ProcessName}" Foreground="{DynamicResource TextMainBrush}" FontWeight="Bold" FontSize="14">
+                                                                <TextBlock.ToolTip>
+                                                                    <ToolTip Background="{DynamicResource BgCardBrush}" Foreground="{DynamicResource TextMainBrush}" BorderBrush="{DynamicResource BorderMainBrush}" BorderThickness="1">
+                                                                        <TextBlock Text="{Binding ToolTipText}" />
+                                                                    </ToolTip>
+                                                                </TextBlock.ToolTip>
+                                                            </TextBlock>
                                                             <Border Background="{DynamicResource BgCardBrush}"  CornerRadius="4" Padding="6,1" Margin="10,0,0,0">
+
                                                                 <TextBlock Text="{Binding ActionType}" Foreground="{Binding ActionColorBrush}" FontSize="11" FontWeight="Bold"/>
+
                                                             </Border>
                                                         </StackPanel>
+
                                                         <TextBlock Text="{Binding TimeDisplay}" Foreground="{DynamicResource TextDimBrush}" FontSize="12" Margin="0,4,0,0"/>
-                                                        <TextBlock Text="{Binding FilePath}" Foreground="#888" FontSize="11" Margin="0,2,0,0" TextTrimming="CharacterEllipsis" ToolTip="{Binding FilePath}"/>
+                                                        <TextBlock Text="{Binding FilePath}" Foreground="#888" FontSize="11" Margin="0,2,0,0" TextTrimming="CharacterEllipsis">
+                                                            <TextBlock.ToolTip>
+                                                                <ToolTip Background="{DynamicResource BgCardBrush}" Foreground="{DynamicResource TextMainBrush}" BorderBrush="{DynamicResource BorderMainBrush}" BorderThickness="1">
+                                                                    <TextBlock Text="{Binding FilePath}" />
+                                                                </ToolTip>
+                                                            </TextBlock.ToolTip>
+                                                        </TextBlock>
                                                     </StackPanel>
                                                 </StackPanel>
                                             </DataTemplate>
@@ -1301,9 +1354,30 @@
                             </StackPanel>
                         </Border>
 
-                        <TextBlock Text="个性化主题配置" Foreground="{DynamicResource TextMainBrush}" FontSize="20" FontWeight="Bold" Margin="0,0,0,20"/>
-                        <TextBlock Text="3D 路由追踪球体透明度:" Foreground="{DynamicResource TextDimBrush}"/>
-                        <Slider x:Name="SliderEarthOpacity" Minimum="0.2" Maximum="1.0" Value="0.9" Margin="0,5,0,15"/>
+                            <TextBlock Text="⚙️ 基础与窗口设置 (General Settings)" Foreground="{DynamicResource TextMainBrush}" FontSize="20" FontWeight="Bold" Margin="0,0,0,20"/>
+                            <Border Background="{DynamicResource BgNavBrush}" BorderBrush="{DynamicResource BorderMainBrush}" BorderThickness="1" CornerRadius="6" Padding="15" Margin="0,0,0,20">
+                                <StackPanel>
+                                    <CheckBox x:Name="ChkAutoStart" Content="开机自动启动 (后台静默)" Foreground="{DynamicResource TextMainBrush}" Margin="0,0,0,15" Checked="GeneralSettings_Changed" Unchecked="GeneralSettings_Changed"/>
+                                    <CheckBox x:Name="ChkMinimizeToTray" Content="点击关闭按钮时，直接最小化到系统托盘 (不再弹窗询问)" Foreground="{DynamicResource TextMainBrush}" Margin="0,0,0,15" Checked="GeneralSettings_Changed" Unchecked="GeneralSettings_Changed"/>
+
+                                    <StackPanel Orientation="Horizontal" Margin="0,0,0,5">
+                                        <CheckBox x:Name="ChkShowMiniWindow" Content="显示桌面悬浮小窗" Foreground="{DynamicResource TextMainBrush}" VerticalAlignment="Center" Checked="GeneralSettings_Changed" Unchecked="GeneralSettings_Changed"/>
+                                        <TextBlock Text="小窗透明度:" Foreground="{DynamicResource TextDimBrush}" VerticalAlignment="Center" Margin="20,0,10,0"/>
+                                        <ComboBox x:Name="ComboMiniWindowOpacity" Width="80" Background="{DynamicResource BgInputBrush}" Foreground="{DynamicResource TextMainBrush}" BorderThickness="1" BorderBrush="{DynamicResource BorderMainBrush}" SelectionChanged="ComboMiniWindowOpacity_SelectionChanged">
+                                            <ComboBoxItem Content="100%" Tag="1.0"/>
+                                            <ComboBoxItem Content="80%" Tag="0.8"/>
+                                            <ComboBoxItem Content="60%" Tag="0.6"/>
+                                            <ComboBoxItem Content="40%" Tag="0.4"/>
+                                            <ComboBoxItem Content="20%" Tag="0.2"/>
+                                            <ComboBoxItem Content="10%" Tag="0.1"/>
+                                        </ComboBox>
+                                    </StackPanel>
+                                </StackPanel>
+                            </Border>
+
+                            <TextBlock Text="个性化主题配置" Foreground="{DynamicResource TextMainBrush}" FontSize="20" FontWeight="Bold" Margin="0,0,0,20"/>
+                            <TextBlock Text="3D 路由追踪球体透明度:" Foreground="{DynamicResource TextDimBrush}"/>
+                            <Slider x:Name="SliderEarthOpacity" Minimum="0.2" Maximum="1.0" Value="0.9" Margin="0,5,0,15"/>
                         <TextBlock Text="全局字体大小:" Foreground="{DynamicResource TextDimBrush}"/>
                         <Slider x:Name="SliderFontSize" Minimum="10" Maximum="20" Value="14" Margin="0,5,0,20"/>
 

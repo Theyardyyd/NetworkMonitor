@@ -155,6 +155,43 @@ namespace NetworkMonitor
             _showLogNet = ChkLogNet.IsChecked == true;
             _showLogOther = ChkLogOther.IsChecked == true;
         }
+        private void GeneralSettings_Changed(object sender, RoutedEventArgs e)
+        {
+            if (!IsLoaded) return;
+
+            if (sender == ChkAutoStart)
+            {
+                ToggleAutoStart(ChkAutoStart.IsChecked == true);
+            }
+            else if (sender == ChkMinimizeToTray)
+            {
+                _savedData.MinimizeToTray = ChkMinimizeToTray.IsChecked == true;
+                _savedData.HasAskedMinimize = true;
+                SaveData();
+            }
+            else if (sender == ChkShowMiniWindow)
+            {
+                if (ChkShowMiniWindow.IsChecked == true)
+                {
+                    if (_miniWindow == null) _miniWindow = new MiniWindow(this);
+                    _miniWindow.Show();
+                }
+                else
+                {
+                    if (_miniWindow != null) _miniWindow.Hide();
+                }
+            }
+        }
+
+        private void ComboMiniWindowOpacity_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (!IsLoaded || _miniWindow == null) return;
+            if (ComboMiniWindowOpacity.SelectedItem is ComboBoxItem item && double.TryParse(item.Tag?.ToString(), out double op))
+            {
+                _miniWindow.Opacity = op;
+            }
+        }
+
         // --- 新增：面板显隐切换 ---
         private void ResToggle_Changed(object sender, RoutedEventArgs e)
         {
@@ -1063,10 +1100,47 @@ namespace NetworkMonitor
             autoStartItem.CheckedChanged += (s, e) => ToggleAutoStart(autoStartItem.Checked);
             menu.Items.Add(autoStartItem);
 
-            menu.Items.Add("显示桌面悬浮窗", null, (s, e) => {
+            var miniWindowMenu = new Forms.ToolStripMenuItem("桌面悬浮窗");
+            var showMiniWindowItem = new Forms.ToolStripMenuItem("显示/隐藏");
+            showMiniWindowItem.Click += (s, e) => {
                 if (_miniWindow == null) _miniWindow = new MiniWindow(this);
-                _miniWindow.Show();
-            });
+                if (_miniWindow.Visibility == Visibility.Visible)
+                {
+                    _miniWindow.Hide();
+                    if (ChkShowMiniWindow != null) ChkShowMiniWindow.IsChecked = false;
+                }
+                else
+                {
+                    _miniWindow.Show();
+                    if (ChkShowMiniWindow != null) ChkShowMiniWindow.IsChecked = true;
+                }
+            };
+            miniWindowMenu.DropDownItems.Add(showMiniWindowItem);
+
+            var opacityMenu = new Forms.ToolStripMenuItem("透明度 (Opacity)");
+            int[] opacities = { 100, 80, 60, 40, 20, 10 };
+            foreach (var op in opacities)
+            {
+                var item = new Forms.ToolStripMenuItem($"{op}%");
+                item.Click += (s, e) => {
+                    if (_miniWindow != null) _miniWindow.Opacity = op / 100.0;
+                    if (ComboMiniWindowOpacity != null)
+                    {
+                        foreach (ComboBoxItem cbItem in ComboMiniWindowOpacity.Items)
+                        {
+                            if (cbItem.Content.ToString() == $"{op}%")
+                            {
+                                ComboMiniWindowOpacity.SelectedItem = cbItem;
+                                break;
+                            }
+                        }
+                    }
+                };
+                opacityMenu.DropDownItems.Add(item);
+            }
+            miniWindowMenu.DropDownItems.Add(opacityMenu);
+            menu.Items.Add(miniWindowMenu);
+
             menu.Items.Add("完全退出", null, (s, e) => {
                 _isRealExit = true;
                 SaveData();
@@ -4868,6 +4942,10 @@ namespace NetworkMonitor
         // ★ v0.5：将保存的数据同步到设置面板 UI
         private void SyncThemeUI()
         {
+            if (ChkAutoStart != null) ChkAutoStart.IsChecked = CheckAutoStart();
+            if (ChkMinimizeToTray != null) ChkMinimizeToTray.IsChecked = _savedData.MinimizeToTray;
+            if (ChkShowMiniWindow != null) ChkShowMiniWindow.IsChecked = _miniWindow != null && _miniWindow.Visibility == Visibility.Visible;
+
             EditColorDown.Text = _savedData.ColorDown;
             EditColorUp.Text = _savedData.ColorUp;
             EditColorCpu.Text = _savedData.ColorCpu;
