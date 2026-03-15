@@ -143,7 +143,18 @@ namespace NetworkMonitor
                 MessageBox.Show("字典导出成功！", "成功", MessageBoxButton.OK, MessageBoxImage.Information);
             }
         }
-
+        private bool _showLogSystem = true;
+        private bool _showLogApp = true;
+        private bool _showLogNet = true;
+        private bool _showLogOther = false;
+        private void LogMarkerToggle_Changed(object sender, RoutedEventArgs e)
+        {
+            if (!IsLoaded) return;
+            _showLogSystem = ChkLogSystem.IsChecked == true;
+            _showLogApp = ChkLogApp.IsChecked == true;
+            _showLogNet = ChkLogNet.IsChecked == true;
+            _showLogOther = ChkLogOther.IsChecked == true;
+        }
         // --- 新增：面板显隐切换 ---
         private void ResToggle_Changed(object sender, RoutedEventArgs e)
         {
@@ -2635,8 +2646,8 @@ namespace NetworkMonitor
             // 主面板的数字
             if (_activeTab == "Traffic")
             {
-                TxtDown.Text = $"下载: {FormatAdaptiveRate(cD, _isBitMode)}";
-                TxtUp.Text = $"上传: {FormatAdaptiveRate(cU, _isBitMode)}";
+                TxtDown.Text = $"下载: {FormatAdaptiveRate(_targetDownSpeed, _isBitMode)}";
+                TxtUp.Text = $"上传: {FormatAdaptiveRate(_targetUpSpeed, _isBitMode)}";
             }
             if (_activeTab == "Traffic" && MainCanvas.ActualWidth > 0 && N > 1)
             {
@@ -2782,6 +2793,15 @@ namespace NetworkMonitor
             // 过滤出当前时间窗口内可见的事件
             var visibleLogs = _savedData.AppLogs.Where((AppLogEvent l) =>
             {
+                // 首先通过自定义的分类规则进行过滤拦截
+                bool allow = false;
+                if (l.Type == "System" || l.Type == "Chart") allow = _showLogSystem;
+                else if (l.Type == "App" || l.Type == "AppUpdate") allow = _showLogApp;
+                else if (l.Type == "Network" || l.Type == "NetworkScanner") allow = _showLogNet;
+                else allow = _showLogOther;
+
+                if (!allow) return false;
+
                 double secondsAgo = (DateTime.Now - l.Timestamp).TotalSeconds;
                 return secondsAgo >= chartRightEdgeAgo && secondsAgo <= chartLeftEdgeAgo;
             }).ToList();

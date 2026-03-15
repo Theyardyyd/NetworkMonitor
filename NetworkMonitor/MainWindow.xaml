@@ -330,8 +330,9 @@
                                             <TextBlock Text="⏳ 正在加载选定时间段数据..." Visibility="{Binding LoadingVisibility}" Foreground="#00E5FF" Margin="15,0,0,0" VerticalAlignment="Center"/>
                                         </StackPanel>
 
-                                        <DataGrid Grid.Row="3" Visibility="{Binding IpGridVisibility}" MaxHeight="200" ItemsSource="{Binding Connections}" AutoGenerateColumns="False" HeadersVisibility="Column" Background="Transparent" RowBackground="Transparent" BorderThickness="0" GridLinesVisibility="None" IsReadOnly="True" ScrollViewer.VerticalScrollBarVisibility="Auto" ScrollViewer.HorizontalScrollBarVisibility="Disabled" VirtualizingStackPanel.ScrollUnit="Pixel" PreviewMouseWheel="InnerDataGrid_PreviewMouseWheel">
-                                            <DataGrid.RowStyle>
+
+                                                <DataGrid Grid.Row="3" Visibility="{Binding IpGridVisibility}" ItemsSource="{Binding Connections}" AutoGenerateColumns="False" HeadersVisibility="Column" Background="Transparent" RowBackground="Transparent" BorderThickness="0" GridLinesVisibility="None" IsReadOnly="True" ScrollViewer.VerticalScrollBarVisibility="Disabled" ScrollViewer.HorizontalScrollBarVisibility="Disabled" VirtualizingStackPanel.ScrollUnit="Pixel">
+                                                    <DataGrid.RowStyle>
                                                 <Style TargetType="DataGridRow">
                                                     <Setter Property="Background" Value="Transparent"/>
                                                     <Setter Property="Foreground" Value="{DynamicResource TextDimBrush}"/>
@@ -1338,7 +1339,17 @@
                                 <CheckBox x:Name="ChkShowDisk" Content="磁盘 (Disk)" Foreground="{DynamicResource TextMainBrush}" Margin="0,0,15,0" Checked="ResToggle_Changed" Unchecked="ResToggle_Changed"/>
                                 <CheckBox x:Name="ChkShowBat" Content="电量 (Bat)" Foreground="{DynamicResource TextMainBrush}" Checked="ResToggle_Changed" Unchecked="ResToggle_Changed"/>
                             </StackPanel>
+
+                            <TextBlock Text="流量图表显示日志标记 (Chart Log Markers):" Foreground="{DynamicResource TextDimBrush}"/>
+                            <StackPanel Orientation="Horizontal" Margin="0,5,0,20">
+                                <CheckBox x:Name="ChkLogSystem" Content="系统提醒" IsChecked="True" Foreground="{DynamicResource TextMainBrush}" Margin="0,0,15,0" Checked="LogMarkerToggle_Changed" Unchecked="LogMarkerToggle_Changed"/>
+                                <CheckBox x:Name="ChkLogApp" Content="应用记录" IsChecked="True" Foreground="{DynamicResource TextMainBrush}" Margin="0,0,15,0" Checked="LogMarkerToggle_Changed" Unchecked="LogMarkerToggle_Changed"/>
+                                <CheckBox x:Name="ChkLogNet" Content="网络扫描" IsChecked="True" Foreground="{DynamicResource TextMainBrush}" Margin="0,0,15,0" Checked="LogMarkerToggle_Changed" Unchecked="LogMarkerToggle_Changed"/>
+                                <CheckBox x:Name="ChkLogOther" Content="其他" IsChecked="False" Foreground="{DynamicResource TextMainBrush}" Checked="LogMarkerToggle_Changed" Unchecked="LogMarkerToggle_Changed"/>
+                            </StackPanel>
+
                             <TextBlock Text="悬停进程解释显示 (Hover Tooltip):" Foreground="{DynamicResource TextDimBrush}"/>
+
                             <ComboBox x:Name="ComboTooltipMode" Width="220" HorizontalAlignment="Left" Background="{DynamicResource BgInputBrush}" Foreground="{DynamicResource TextMainBrush}" BorderBrush="{DynamicResource BorderMainBrush}" BorderThickness="1" Margin="0,5,0,20" SelectionChanged="ComboTooltipMode_SelectionChanged">
                                 <ComboBoxItem Content="不显示解释" Tag="0"/>
                                 <ComboBoxItem Content="仅显示进程名称" Tag="1"/>
