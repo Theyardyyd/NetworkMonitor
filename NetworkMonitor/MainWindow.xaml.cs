@@ -3669,29 +3669,12 @@ namespace NetworkMonitor
             if (isInactive != _isCurrentlyInactive)
             {
                 _isCurrentlyInactive = isInactive;
-                if (isInactive)
-                    AddLogEvent("System", "系统进入不活跃状态", "检测到鼠标或键盘超1分钟无操作（已排除视频播放等干扰），暂停活跃时长统计。", "#888888");
-                else
-                    AddLogEvent("System", "系统恢复活跃", "检测到用户恢复操作，继续活跃时长记录。", "#32CD32");
+                if (isInactive) AddLogEvent("System", "系统进入不活跃状态", "检测到鼠标或键盘超1分钟无操作（已排除视频播放等干扰），暂停活跃时长统计。", "#888888");
+                else AddLogEvent("System", "系统恢复活跃", "检测到用户恢复操作，继续活跃时长记录。", "#32CD32");
             }
-
-            // 如果是不活跃状态，则不再执行 TrackWindowActivity() 时间累加
-            if (!isInactive)
-            {
-                TrackWindowActivity(); // 执行窗口追踪逻辑
-            }
-
-            TrackAppLifecycles(); // 执行应用生命周期(启动/关闭)追踪
             if (_isProcessingProcesses) return;
-
-            // ★ 修复 Bug 1：一旦已经渲染过一次“冻结的时间段”，全面阻断下方的任何重算与UI同步更新，让数据彻底“停驻”
-            if (_isChartDragPaused && _hasRenderedPausedState)
-            {
-                if (PanelProcessLoading != null) PanelProcessLoading.Visibility = Visibility.Collapsed;
-                return;
-            }
-            
             _isProcessingProcesses = true;
+
             try
             {
                 // ★ 修复致命卡顿：将极其耗时的进程枚举和底层窗口 API 调用强制放入独立后台线程
@@ -3700,6 +3683,10 @@ namespace NetworkMonitor
                     TrackAppLifecycles();
                 });
                 var uiDict = await Task.Run(() => {
+
+
+
+
                     var conns = GetAllTcpConnections();
                     var pAggs = new Dictionary<string, ProcessAggregateInfo>();
                     var pidIPs = new Dictionary<int, HashSet<string>>();
@@ -4670,7 +4657,7 @@ namespace NetworkMonitor
             }
 
             await Dispatcher.InvokeAsync(() => {
-                if (LstEarthDiagSummary != null) LstEarthDiagSummary.ItemsSource = bindableStatsList;
+                if (LstEarthDiagSummary != null) LstEarthDiagSummary.DataContext = bindableStatsList;
             });
 
             while (!token.IsCancellationRequested)
@@ -6780,12 +6767,11 @@ namespace NetworkMonitor
                 bindableStatsList.Add(nStat);
             }
 
-            // 【核心】将准备好的数据源绑定到 XAML 的 ItemsControl (必须用 ItemsSource 而不是 DataContext)
+            // 【核心】将准备好的数据源绑定到 XAML 的 ItemsControl
             Dispatcher.Invoke(() =>
             {
-                if (this.FindName("LstDiagSummary") is ItemsControl lst) lst.ItemsSource = bindableStatsList;
+                if (this.FindName("LstDiagSummary") is ItemsControl lst) lst.DataContext = bindableStatsList;
             });
-
 
             // 3. 决定是否需要基础 Traceroute
             if (monitorNodes.Count > 1)

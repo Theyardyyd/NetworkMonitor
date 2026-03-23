@@ -1,7 +1,7 @@
 ﻿<Window x:Class="NetworkMonitor.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="System DashBoard v1.10.7" Height="720" Width="1100" 
+        Title="System DashBoard v1.11.0" Height="720" Width="1100" 
         Background="{DynamicResource BgMainBrush}" 
         WindowStartupLocation="CenterScreen">
     <Window.Resources>
@@ -869,12 +869,8 @@
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="260"/>
                 </Grid.ColumnDefinitions>
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="*"/>
-                    <RowDefinition Height="Auto"/>
-                </Grid.RowDefinitions>
 
-                <ScrollViewer Grid.Row="0" Grid.Column="0" VerticalScrollBarVisibility="Auto" Padding="0,0,15,0">
+                <ScrollViewer Grid.Column="0" VerticalScrollBarVisibility="Auto" Padding="0,0,15,0">
                     <StackPanel>
                         <Grid x:Name="EarthContainer" Height="500" Background="Transparent"
                               MouseWheel="Earth3D_MouseWheel" 
@@ -897,7 +893,6 @@
                                 </ModelVisual3D>
                                 <ModelVisual3D x:Name="EarthModel"/>
                             </Viewport3D>
-
                             <Canvas x:Name="EarthOverlayCanvas" IsHitTestVisible="False"/>
                         </Grid>
 
@@ -919,49 +914,47 @@
                             </Grid>
                         </Border>
 
+                        <Border x:Name="PanelEarthDiagnostics" Visibility="Collapsed" Background="#18181E" BorderBrush="#333333" BorderThickness="1" CornerRadius="6" Height="260" Margin="0,15,0,15">
+                            <Grid Margin="15">
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="*"/>
+                                </Grid.RowDefinitions>
 
+                                <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
+                                    <TextBlock x:Name="TxtEarthDiagTitle" Text="📡 IP 路由空间追踪实时诊断" Foreground="White" FontWeight="Bold" FontSize="14"/>
+                                    <Button x:Name="BtnPauseEarthDiag" Content="⏸ 暂停" Margin="15,0,0,0" Padding="8,2" Background="#FF9800" Foreground="White" BorderThickness="0" Cursor="Hand" Click="BtnPauseEarthDiag_Click"/>
+                                </StackPanel>
+
+                                <Grid Grid.Row="1">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="220"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+
+                                    <ScrollViewer VerticalScrollBarVisibility="Auto" Margin="0,0,10,0">
+                                        <ItemsControl x:Name="LstEarthDiagSummary">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate>
+                                                    <Grid Margin="0,3">
+                                                        <TextBlock Text="{Binding NodeIpPadded}" Foreground="{Binding NodeColor}" FontFamily="Consolas" FontSize="12" FontWeight="Bold"/>
+                                                        <TextBlock Text="{Binding LastDelayStr}" Foreground="White" HorizontalAlignment="Right" FontSize="12"/>
+                                                    </Grid>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </ScrollViewer>
+
+                                    <Border Grid.Column="1" Background="#22000000" BorderBrush="#333" BorderThickness="1" CornerRadius="4">
+                                        <Canvas x:Name="EarthChartCanvas" ClipToBounds="True"/>
+                                    </Border>
+                                </Grid>
+                            </Grid>
+                        </Border>
                     </StackPanel>
                 </ScrollViewer>
 
-                <Border x:Name="PanelEarthDiagnostics" Grid.Row="1" Grid.Column="0" Visibility="Collapsed" Background="#18181E" BorderBrush="#333333" BorderThickness="1" CornerRadius="6" Height="260" Margin="0,15,15,15">
-                    <Grid Margin="15">
-                        <Grid.RowDefinitions>
-                            <RowDefinition Height="Auto"/>
-                            <RowDefinition Height="*"/>
-                        </Grid.RowDefinitions>
-
-                        <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
-                            <TextBlock x:Name="TxtEarthDiagTitle" Text="📡 IP 路由空间追踪实时诊断" Foreground="White" FontWeight="Bold" FontSize="14"/>
-                            <Button x:Name="BtnPauseEarthDiag" Content="⏸ 暂停" Margin="15,0,0,0" Padding="8,2" Background="#FF9800" Foreground="White" BorderThickness="0" Cursor="Hand" Click="BtnPauseEarthDiag_Click"/>
-                        </StackPanel>
-
-                        <Grid Grid.Row="1">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="220"/>
-                                <ColumnDefinition Width="*"/>
-                            </Grid.ColumnDefinitions>
-
-                            <ScrollViewer VerticalScrollBarVisibility="Auto" Margin="0,0,10,0">
-                                <ItemsControl x:Name="LstEarthDiagSummary">
-                                    <ItemsControl.ItemTemplate>
-                                        <DataTemplate>
-                                            <Grid Margin="0,3">
-                                                <TextBlock Text="{Binding NodeIpPadded}" Foreground="{Binding NodeColor}" FontFamily="Consolas" FontSize="12" FontWeight="Bold"/>
-                                                <TextBlock Text="{Binding LastDelayStr}" Foreground="White" HorizontalAlignment="Right" FontSize="12"/>
-                                            </Grid>
-                                        </DataTemplate>
-                                    </ItemsControl.ItemTemplate>
-                                </ItemsControl>
-                            </ScrollViewer>
-
-                            <Border Grid.Column="1" Background="#22000000" BorderBrush="#333" BorderThickness="1" CornerRadius="4">
-                                <Canvas x:Name="EarthChartCanvas" ClipToBounds="True"/>
-                            </Border>
-                        </Grid>
-                    </Grid>
-                </Border>
-
-                <Border Grid.Column="1" Grid.RowSpan="2" Background="{DynamicResource BgMainBrush}" BorderBrush="{DynamicResource BorderMainBrush}" BorderThickness="1,0,0,0" Padding="15">
+                <Border Grid.Column="1" Background="{DynamicResource BgMainBrush}" BorderBrush="{DynamicResource BorderMainBrush}" BorderThickness="1,0,0,0" Padding="15">
                     <Grid>
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto"/>
@@ -986,17 +979,11 @@
                             <Button Content="📂 导入本地地图贴图" Margin="0,0,0,10" Padding="8,5" Background="{DynamicResource BgInputBrush}" Foreground="#00E5FF" BorderThickness="1" BorderBrush="{DynamicResource BorderMainBrush}" Click="BtnImportMap_Click" Cursor="Hand"/>
                             <CheckBox x:Name="ChkHighResMap" Content="🎨 高清模式" Foreground="{DynamicResource TextDimBrush}" VerticalAlignment="Center" Checked="ChkHighResMap_CheckedChanged" Unchecked="ChkHighResMap_CheckedChanged"/>
                             <TextBlock Text=" 极限宽度:" Foreground="{DynamicResource TextDimBrush}" VerticalAlignment="Center" Margin="10,0,5,0"/>
-                            <TextBox x:Name="TxtMaxRes" Text="8192" Width="60" Height="20" 
-             Background="{DynamicResource BgInputBrush}" 
-             Foreground="{DynamicResource TextMainBrush}" 
-             BorderThickness="1" BorderBrush="{DynamicResource BorderMainBrush}"
-             VerticalContentAlignment="Center" HorizontalContentAlignment="Center"
-             TextChanged="TxtMaxRes_TextChanged"/>
+                            <TextBox x:Name="TxtMaxRes" Text="8192" Width="60" Height="20" Background="{DynamicResource BgInputBrush}" Foreground="{DynamicResource TextMainBrush}" BorderThickness="1" BorderBrush="{DynamicResource BorderMainBrush}" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" TextChanged="TxtMaxRes_TextChanged"/>
                             <TextBlock Text=" px" Foreground="{DynamicResource TextDimBrush}" VerticalAlignment="Center"/>
                             <TextBlock Text=" 操作指南:" Foreground="{DynamicResource TextDimBrush}" FontSize="11" VerticalAlignment="Center" Margin="15,0,0,0"/>
                             <TextBlock Text=" 滚轮缩放 / 拖拽平移 / 勾选高清模式享受无限细节" Foreground="#666" FontSize="11" VerticalAlignment="Center"/>
                         </StackPanel>
-
                         <Button Grid.Row="3" Content="退出追踪模式" Padding="10" Background="#FF2277" Foreground="{DynamicResource TextMainBrush}" FontWeight="Bold" Margin="0,15,0,0" Click="BtnCloseEarth_Click" BorderThickness="0" Cursor="Hand"/>
                     </Grid>
                 </Border>
