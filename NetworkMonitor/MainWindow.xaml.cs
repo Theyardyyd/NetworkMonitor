@@ -699,8 +699,7 @@ namespace NetworkMonitor
         private ObservableCollection<FileIoEvent> _uiFileLogs = new ObservableCollection<FileIoEvent>();
         private Dictionary<AppLogEvent, UIElement> _chartEventMarkers = new Dictionary<AppLogEvent, UIElement>();
         // ★ 应用时光机运行时变量
-        private Dictionary<int, AppSessionInfo> _activeAppSessions = new Dictionary<int, AppSessionInfo>();
-        private ObservableCollection<AppSessionInfo> _uiAppLogs = new ObservableCollection<AppSessionInfo>();
+        private ConcurrentDictionary<int, AppSessionInfo> _activeAppSessions = new ConcurrentDictionary<int, AppSessionInfo>(); private ObservableCollection<AppSessionInfo> _uiAppLogs = new ObservableCollection<AppSessionInfo>();
         private ObservableCollection<AppSessionInfo> _uiSnapshotApps = new ObservableCollection<AppSessionInfo>();
 
         // ★ 核心方法：追踪有界面的软件的启动和关闭
@@ -708,12 +707,12 @@ namespace NetworkMonitor
         {
             var currentPids = new HashSet<int>();
             var processes = Process.GetProcesses();
+            var newSessions = new List<AppSessionInfo>();
 
             foreach (var p in processes)
             {
                 try
                 {
-                    // 只追踪有主窗口(GUI)的用户软件，忽略后台纯服务进程
                     if (p.MainWindowHandle == IntPtr.Zero) continue;
 
                     string pName = p.ProcessName;
@@ -721,15 +720,13 @@ namespace NetworkMonitor
 
                     currentPids.Add(p.Id);
 
-                    // 发现新启动的软件
                     if (!_activeAppSessions.ContainsKey(p.Id))
                     {
                         string path = "";
-                        try { path = p.MainModule?.FileName ?? ""; } catch { } // 获取绝对路径(需权限)
+                        try { path = p.MainModule?.FileName ?? ""; } catch { }
 
                         if (!string.IsNullOrEmpty(path))
                         {
-                            // 应用版本变更检测
                             try
                             {
                                 var verInfo = FileVersionInfo.GetVersionInfo(path);
@@ -742,40 +739,37 @@ namespace NetworkMonitor
                                         {
                                             if (oldVer != currentVer)
                                             {
-                                                _savedData.AppVersions[path] = currentVer; // 更新为新版本
+                                                _savedData.AppVersions[path] = currentVer;
                                                 string appDisplayName = ProcessDictionary.GetWithDesc(pName);
                                                 Dispatcher.InvokeAsync(() => {
-                                                    AddLogEvent("AppUpdate", "应用版本已变更", $"{appDisplayName} 的版本已从 {oldVer} 变更为 {currentVer}。", "#FF9800"); // 橙色警告
+                                                    AddLogEvent("AppUpdate", "应用版本已变更", $"{appDisplayName} 的版本已从 {oldVer} 变更为 {currentVer}。", "#FF9800");
                                                 });
                                             }
                                         }
                                         else
                                         {
-                                            _savedData.AppVersions[path] = currentVer; // 第一次记录该软件版本
+                                            _savedData.AppVersions[path] = currentVer;
                                         }
                                     }
                                 }
                             }
-                            catch { /* 忽略无法获取版本的程序 */ }
-                            // =============================
+                            catch { }
+
                             var session = new AppSessionInfo
                             {
                                 ProcessName = pName,
                                 ExePath = path,
                                 StartTime = DateTime.Now,
-                                Icon = GetIcon(path) // ★ 提取图标
+                                Icon = GetIcon(path)
                             };
                             _activeAppSessions[p.Id] = session;
+                            newSessions.Add(session);
 
                             lock (_saveDataLock)
                             {
                                 _savedData.AppSessions.Insert(0, session);
-                                // 最多保存 2000 条记录防止文件过大
                                 if (_savedData.AppSessions.Count > 2000) _savedData.AppSessions.RemoveAt(_savedData.AppSessions.Count - 1);
                             }
-                            Dispatcher.InvokeAsync(() => {
-                                _uiAppLogs.Insert(0, session);
-                            });
                         }
                     }
                 }
@@ -783,16 +777,137 @@ namespace NetworkMonitor
                 finally { p.Dispose(); }
             }
 
-            // 结算已经关闭的软件
             var deadPids = _activeAppSessions.Keys.Except(currentPids).ToList();
             foreach (var dead in deadPids)
             {
-                var session = _activeAppSessions[dead];
-                session.EndTime = DateTime.Now; // 记录关闭时间
-                _activeAppSessions.Remove(dead);
+                if (_activeAppSessions.TryRemove(dead, out var session))
+                {
+                    session.EndTime = DateTime.Now;
+                }
+            }
+
+            if (newSessions.Count > 0)
+            {
+                Dispatcher.InvokeAsync(() => {
+                    foreach (var s in newSessions)
+                    {
+                        _uiAppLogs.Insert(0, s);
+                    }
+                });
             }
         }
 
+        private void TrackWindowActivity()
+        {
+            IntPtr foregroundHWnd = GetForegroundWindow();
+            IntPtr shellHWnd = GetShellWindow();
+            HashSet<string> secondaryApps = new HashSet<string>();
+            string primaryApp = "";
+
+            string todayStr = DateTime.Today.ToString("yyyy-MM-dd");
+            string timeKey = $"{todayStr}_{DateTime.Now.Hour:D2}{DateTime.Now.Minute:D2}";
+
+            lock (_saveDataLock)
+            {
+                if (!_savedData.HourlyPrimaryTime.ContainsKey(timeKey)) _savedData.HourlyPrimaryTime[timeKey] = new Dictionary<string, long>();
+                if (!_savedData.HourlySecondaryTime.ContainsKey(timeKey)) _savedData.HourlySecondaryTime[timeKey] = new Dictionary<string, long>();
+                if (!_savedData.HourlyBackgroundTime.ContainsKey(timeKey)) _savedData.HourlyBackgroundTime[timeKey] = new Dictionary<string, long>();
+
+                if (!_savedData.DailyAppActiveTime.ContainsKey(todayStr)) _savedData.DailyAppActiveTime[todayStr] = new Dictionary<string, long>();
+                if (!_savedData.DailyPrimaryTime.ContainsKey(todayStr)) _savedData.DailyPrimaryTime[todayStr] = new Dictionary<string, long>();
+                if (!_savedData.DailySecondaryTime.ContainsKey(todayStr)) _savedData.DailySecondaryTime[todayStr] = new Dictionary<string, long>();
+                if (!_savedData.DailyBackgroundTime.ContainsKey(todayStr)) _savedData.DailyBackgroundTime[todayStr] = new Dictionary<string, long>();
+
+                if (foregroundHWnd != IntPtr.Zero)
+                {
+                    GetWindowThreadProcessId(foregroundHWnd, out int fgPid);
+                    EtwNetworkTracker.CurrentForegroundPid = fgPid;
+
+                    primaryApp = GetProcessNameFromHWnd(foregroundHWnd);
+                    if (!string.IsNullOrEmpty(primaryApp))
+                    {
+                        _savedData.PrimaryWindowTimes[primaryApp] = _savedData.PrimaryWindowTimes.GetValueOrDefault(primaryApp, 0) + 2;
+                        _savedData.DailyPrimaryTime[todayStr][primaryApp] = _savedData.DailyPrimaryTime[todayStr].GetValueOrDefault(primaryApp, 0) + 2;
+                        _savedData.HourlyPrimaryTime[timeKey][primaryApp] = _savedData.HourlyPrimaryTime[timeKey].GetValueOrDefault(primaryApp, 0) + 2;
+                        _savedData.DailyAppActiveTime[todayStr][primaryApp] = _savedData.DailyAppActiveTime[todayStr].GetValueOrDefault(primaryApp, 0) + 2;
+                    }
+                }
+
+                EnumWindows((hWnd, lParam) =>
+                {
+                    DwmGetWindowAttribute(hWnd, 14, out int isCloaked, 4);
+
+                    GetWindowRect(hWnd, out RECT rect);
+                    bool hasSize = (rect.Right - rect.Left > 0) && (rect.Bottom - rect.Top > 0);
+
+                    if (hWnd != foregroundHWnd && hWnd != shellHWnd &&
+                        IsWindowVisible(hWnd) && !IsIconic(hWnd) &&
+                        GetWindowTextLength(hWnd) > 0 && isCloaked == 0 && hasSize)
+                    {
+                        string pName = GetProcessNameFromHWnd(hWnd);
+                        if (!string.IsNullOrEmpty(pName) && pName != primaryApp)
+                        {
+                            secondaryApps.Add(pName);
+                        }
+                    }
+                    return true;
+                }, IntPtr.Zero);
+
+                foreach (var app in secondaryApps)
+                {
+                    _savedData.SecondaryWindowTimes[app] = _savedData.SecondaryWindowTimes.GetValueOrDefault(app, 0) + 2;
+                    _savedData.DailySecondaryTime[todayStr][app] = _savedData.DailySecondaryTime[todayStr].GetValueOrDefault(app, 0) + 2;
+                    _savedData.DailyAppActiveTime[todayStr][app] = _savedData.DailyAppActiveTime[todayStr].GetValueOrDefault(app, 0) + 2;
+                }
+
+                var allProcesses = Process.GetProcesses();
+                HashSet<string> uniqueBgApps = new HashSet<string>();
+
+                foreach (var p in allProcesses)
+                {
+                    try
+                    {
+                        string pName = p.ProcessName;
+                        string[] systemExcludes = { "svchost", "RuntimeBroker", "dllhost", "conhost", "SearchHost", "SystemSettings", "sihost", "taskhostw", "explorer", "ApplicationFrameHost" };
+
+                        if (pName != primaryApp &&
+                            !secondaryApps.Contains(pName) &&
+                            !systemExcludes.Contains(pName) &&
+                            pName != "Idle" && pName != "System")
+                        {
+                            uniqueBgApps.Add(pName);
+                        }
+                    }
+                    catch { }
+                    finally { p.Dispose(); }
+                }
+
+                foreach (var app in uniqueBgApps)
+                {
+                    _savedData.BackgroundProcessTimes[app] = _savedData.BackgroundProcessTimes.GetValueOrDefault(app, 0) + 2;
+                    _savedData.DailyBackgroundTime[todayStr][app] = _savedData.DailyBackgroundTime[todayStr].GetValueOrDefault(app, 0) + 2;
+                    _savedData.DailyAppActiveTime[todayStr][app] = _savedData.DailyAppActiveTime[todayStr].GetValueOrDefault(app, 0) + 2;
+                }
+            }
+
+            Dispatcher.InvokeAsync(() => UpdateWindowActivityUI());
+        }
+
+        private void UpdateWindowActivityUI()
+        {
+            // 如果用户没在看资源分配面板，跳过 UI 刷新
+            if (_activeTab != "Resources") return;
+            if (BtnBackToLive.Visibility == Visibility.Visible) return;
+
+            lock (_saveDataLock)
+            {
+                UpdateDataGrid(_savedData.PrimaryWindowTimes, _primaryWindowList);
+                UpdateDataGrid(_savedData.SecondaryWindowTimes, _secondaryWindowList);
+                UpdateDataGrid(_savedData.BackgroundProcessTimes, _backgroundWindowList);
+            }
+
+            if (_isWindowDonutView) DrawWindowDonutChart();
+        }
 
         // 辅助方法：添加新日志
         public void AddLogEvent(string type, string title, string msg, string color)
@@ -1449,6 +1564,9 @@ namespace NetworkMonitor
                 if (this.FindName("ViewLog") is Grid vLog) vLog.Visibility = Visibility.Collapsed;
                 if (this.FindName("ViewLauncher") is Grid vLaunch) vLaunch.Visibility = Visibility.Collapsed;
                 if (this.FindName("ViewScanner") is Grid vScan) vScan.Visibility = Visibility.Collapsed; // 确保这行存在 [cite: 1]
+                if (this.FindName("ViewDiagnostics") is Grid vDiag) vDiag.Visibility = Visibility.Collapsed;
+
+
                 FrameworkElement targetView = null; // 修复：使用基类 FrameworkElement 以兼容 Grid 和 ScrollViewer
                 // 根据点击的按钮显示对应视图
                 if (btn.Name == "NavTraffic")
@@ -3576,6 +3694,11 @@ namespace NetworkMonitor
             _isProcessingProcesses = true;
             try
             {
+                // ★ 修复致命卡顿：将极其耗时的进程枚举和底层窗口 API 调用强制放入独立后台线程
+                await Task.Run(() => {
+                    if (!isInactive) TrackWindowActivity();
+                    TrackAppLifecycles();
+                });
                 var uiDict = await Task.Run(() => {
                     var conns = GetAllTcpConnections();
                     var pAggs = new Dictionary<string, ProcessAggregateInfo>();
@@ -4618,11 +4741,13 @@ namespace NetworkMonitor
             Dispatcher.InvokeAsync(() =>
             {
                 canvas.Children.Clear();
-                double w = canvas.ActualWidth; double h = canvas.ActualHeight;
+                double w = canvas.ActualWidth;
+                double h = canvas.ActualHeight;
                 if (w <= 0 || h <= 0) return;
-                double stepX = w / 59.0; double maxY = 200.0;
 
-                // --- 核心修复：更改循环变量名为 stepVal 避免冲突，并修正 height 为 h ---
+                double maxY = 200.0;
+
+                // 画背景虚线
                 for (int stepVal = 50; stepVal <= 200; stepVal += 50)
                 {
                     double yPos = h - (stepVal / maxY * h);
@@ -4648,16 +4773,31 @@ namespace NetworkMonitor
                     }
                 }
 
+                // ★ 修复空地问题：动态获取当前所有节点中最大的历史记录长度作为基准容量，确保无论队列真实上限是多少，折线充满时都能完美到达最左侧坐标0
+                int maxCapacity = 2;
+                foreach (var node in nodes)
+                {
+                    if (statsDict.ContainsKey(node) && statsDict[node].History.Count > maxCapacity)
+                        maxCapacity = statsDict[node].History.Count;
+                }
+
+                // 计算完美步长：宽度 / (最大容量 - 1)，这样当队列达到上限时，首点一定是 0，末点一定是 w
+                double stepX = w / (maxCapacity - 1);
+
                 foreach (var node in nodes)
                 {
                     if (!statsDict.ContainsKey(node)) continue;
                     var nStat = statsDict[node];
                     var history = nStat.History.ToArray();
                     if (history.Length < 2) continue;
+
                     Polyline line = new Polyline { Stroke = nStat.NodeColor, StrokeThickness = 1.2, Opacity = 0.8 };
+
+                    // 让当前节点的折线强制右对齐，前面不足的部分留空，达到最大容量时首端完美贴合左侧0坐标
+                    int startIndex = maxCapacity - history.Length;
                     for (int i = 0; i < history.Length; i++)
                     {
-                        double x = w - ((history.Length - 1 - i) * stepX);
+                        double x = (startIndex + i) * stepX;
                         double val = history[i] < 0 ? maxY : Math.Min(history[i], maxY);
                         double y = h - (val / maxY * h);
                         line.Points.Add(new Point(x, y));
@@ -5033,104 +5173,6 @@ namespace NetworkMonitor
         [StructLayout(LayoutKind.Sequential)]
         public struct RECT { public int Left, Top, Right, Bottom; }
 
-        private void TrackWindowActivity()
-        {
-            IntPtr foregroundHWnd = GetForegroundWindow();
-            IntPtr shellHWnd = GetShellWindow(); // 获取系统壳程序窗口
-            HashSet<string> secondaryApps = new HashSet<string>();
-            string primaryApp = "";
-
-            string todayStr = DateTime.Today.ToString("yyyy-MM-dd");
-            string timeKey = $"{todayStr}_{DateTime.Now.Hour:D2}{DateTime.Now.Minute:D2}";
-
-            if (!_savedData.HourlyPrimaryTime.ContainsKey(timeKey)) _savedData.HourlyPrimaryTime[timeKey] = new Dictionary<string, long>();
-            if (!_savedData.HourlySecondaryTime.ContainsKey(timeKey)) _savedData.HourlySecondaryTime[timeKey] = new Dictionary<string, long>();
-            if (!_savedData.HourlyBackgroundTime.ContainsKey(timeKey)) _savedData.HourlyBackgroundTime[timeKey] = new Dictionary<string, long>();
-
-            if (!_savedData.DailyAppActiveTime.ContainsKey(todayStr)) _savedData.DailyAppActiveTime[todayStr] = new Dictionary<string, long>();
-            if (!_savedData.DailyPrimaryTime.ContainsKey(todayStr)) _savedData.DailyPrimaryTime[todayStr] = new Dictionary<string, long>();
-            if (!_savedData.DailySecondaryTime.ContainsKey(todayStr)) _savedData.DailySecondaryTime[todayStr] = new Dictionary<string, long>();
-            if (!_savedData.DailyBackgroundTime.ContainsKey(todayStr)) _savedData.DailyBackgroundTime[todayStr] = new Dictionary<string, long>();
-
-            // 1. 获取主活动窗口
-            if (foregroundHWnd != IntPtr.Zero)
-            {
-                GetWindowThreadProcessId(foregroundHWnd, out int fgPid);
-                EtwNetworkTracker.CurrentForegroundPid = fgPid; // ★ 核心：实时同步前台焦点 PID 供文件引擎判断
-
-                primaryApp = GetProcessNameFromHWnd(foregroundHWnd);
-                if (!string.IsNullOrEmpty(primaryApp))
-                {
-                    _savedData.PrimaryWindowTimes[primaryApp] = _savedData.PrimaryWindowTimes.GetValueOrDefault(primaryApp, 0) + 2;
-                    // 将主活动窗口记入当日时间字典中（为热力图弹窗提供数据）
-                    _savedData.DailyPrimaryTime[todayStr][primaryApp] = _savedData.DailyPrimaryTime[todayStr].GetValueOrDefault(primaryApp, 0) + 2;
-                    // 记录小时级数据
-                    _savedData.HourlyPrimaryTime[timeKey][primaryApp] = _savedData.HourlyPrimaryTime[timeKey].GetValueOrDefault(primaryApp, 0) + 2;
-                    // 同步累加到总活跃时间字典
-                    _savedData.DailyAppActiveTime[todayStr][primaryApp] = _savedData.DailyAppActiveTime[todayStr].GetValueOrDefault(primaryApp, 0) + 2;
-                }
-            }
-
-            // 2. 次要窗口判定： Cloaked(隐形) 检查
-            EnumWindows((hWnd, lParam) =>
-            {
-                DwmGetWindowAttribute(hWnd, 14, out int isCloaked, 4);
-
-                GetWindowRect(hWnd, out RECT rect);
-                bool hasSize = (rect.Right - rect.Left > 0) && (rect.Bottom - rect.Top > 0);
-
-                if (hWnd != foregroundHWnd && hWnd != shellHWnd &&
-                    IsWindowVisible(hWnd) && !IsIconic(hWnd) &&
-                    GetWindowTextLength(hWnd) > 0 && isCloaked == 0 && hasSize)
-                {
-                    string pName = GetProcessNameFromHWnd(hWnd);
-                    if (!string.IsNullOrEmpty(pName) && pName != primaryApp)
-                    {
-                        secondaryApps.Add(pName);
-                    }
-                }
-                return true;
-            }, IntPtr.Zero);
-
-            foreach (var app in secondaryApps)
-            {
-                _savedData.SecondaryWindowTimes[app] = _savedData.SecondaryWindowTimes.GetValueOrDefault(app, 0) + 2;
-                _savedData.DailySecondaryTime[todayStr][app] = _savedData.DailySecondaryTime[todayStr].GetValueOrDefault(app, 0) + 2;
-                _savedData.DailyAppActiveTime[todayStr][app] = _savedData.DailyAppActiveTime[todayStr].GetValueOrDefault(app, 0) + 2;
-            }
-
-            // 3. 记录后台活动 (Background)
-            var allProcesses = Process.GetProcesses();
-            HashSet<string> uniqueBgApps = new HashSet<string>();
-
-            foreach (var p in allProcesses)
-            {
-                try
-                {
-                    string pName = p.ProcessName;
-                    string[] systemExcludes = { "svchost", "RuntimeBroker", "dllhost", "conhost", "SearchHost", "SystemSettings", "sihost", "taskhostw", "explorer", "ApplicationFrameHost" };
-
-                    if (pName != primaryApp &&
-                        !secondaryApps.Contains(pName) &&
-                        !systemExcludes.Contains(pName) &&
-                        pName != "Idle" && pName != "System")
-                    {
-                        uniqueBgApps.Add(pName);
-                    }
-                }
-                catch { }
-                finally { p.Dispose(); }
-            }
-
-            foreach (var app in uniqueBgApps)
-            {
-                _savedData.BackgroundProcessTimes[app] = _savedData.BackgroundProcessTimes.GetValueOrDefault(app, 0) + 2;
-                _savedData.DailyBackgroundTime[todayStr][app] = _savedData.DailyBackgroundTime[todayStr].GetValueOrDefault(app, 0) + 2;
-                _savedData.DailyAppActiveTime[todayStr][app] = _savedData.DailyAppActiveTime[todayStr].GetValueOrDefault(app, 0) + 2;
-            }
-
-            UpdateWindowActivityUI();
-        }
 
         // 辅助方法：通过句柄获取进程名
         private string GetProcessNameFromHWnd(IntPtr hWnd)
@@ -5149,20 +5191,6 @@ namespace NetworkMonitor
             catch { return ""; }
         }
 
-        private void UpdateWindowActivityUI()
-        {
-            // 如果用户没在看资源分配面板，跳过 UI 刷新
-            if (_activeTab != "Resources") return;
-
-            // ★ 修复 1：如果处于历史模式，禁止定时器用实时数据覆盖历史视图
-            if (BtnBackToLive.Visibility == Visibility.Visible) return;
-
-            UpdateDataGrid(_savedData.PrimaryWindowTimes, _primaryWindowList);
-            UpdateDataGrid(_savedData.SecondaryWindowTimes, _secondaryWindowList);
-            UpdateDataGrid(_savedData.BackgroundProcessTimes, _backgroundWindowList);
-
-            if (_isWindowDonutView) DrawWindowDonutChart();
-        }
 
         private void UpdateDataGrid(Dictionary<string, long> sourceData, ObservableCollection<WindowActivityInfo> targetList, string emptyName = "")
         {
@@ -6556,12 +6584,13 @@ namespace NetworkMonitor
         private async Task AutoTraceAndMonitorAsync(string targetIp)
         {
             // 初始化 UI 并强制解释虚拟IP与物理IP的区别
-            if (this.FindName("PanelIpDiagnostics") is Border panel) panel.Visibility = Visibility.Visible;
-            if (this.FindName("TxtDiagTitle") is TextBlock title) title.Text = $"📡 物理层路由自动寻迹: {targetIp}";
-
+            ViewTraffic.Visibility = ViewSystem.Visibility = ViewResources.Visibility = ViewSettings.Visibility = ViewEarth.Visibility = Visibility.Collapsed;
+            if (this.FindName("ViewLog") is Grid vLog) vLog.Visibility = Visibility.Collapsed;
+            if (this.FindName("ViewScanner") is Grid vScan) vScan.Visibility = Visibility.Collapsed;
+            if (this.FindName("ViewDiagnostics") is Grid panel) panel.Visibility = Visibility.Visible;
             if (this.FindName("TxtDiagOutput") is TextBlock output)
             {
-                output.Text = $"【系统提示：一键网关溯源引擎启动】\n目标 IP: {targetIp}\n\n[!] 重要提醒：如果您填入的是 P2P 的虚拟IP(如 10.x.x.x)，底层操作系统只会将其视为1跳直连。\n请务必确认填入的是对方的【真实物理局域网 IP / 真实公网出口 IP】（可通过 easytier-cli peer 查看）。\n\n[阶段 1] 正在强行挖掘真实的沿路物理网关设备...\n---------------------------------------------------\n";
+                output.Text = $"【系统提示：一键网关溯源引擎启动】\n目标 IP: {targetIp}\n\n[!] 重要提醒：如果您填入的是 P2P 的虚拟IP，底层操作系统只会将其视为1跳直连。\n请务必确认填入的是对方的【真实物理局域网 IP / 真实公网出口 IP】。\n\n[阶段 1] 正在强行挖掘真实的沿路物理网关设备...\n---------------------------------------------------\n";
             }
             if (this.FindName("BtnStopDiag") is Button stopBtn) stopBtn.IsEnabled = true;
 
@@ -6652,8 +6681,11 @@ namespace NetworkMonitor
             ViewTraffic.Visibility = ViewSystem.Visibility = ViewResources.Visibility = ViewSettings.Visibility = ViewEarth.Visibility = Visibility.Collapsed;
             // 唤出诊断面板 (复用UI)
             if (this.FindName("PanelIpDiagnostics") is Border panel)
-                panel.Visibility = Visibility.Visible;
+            {
 
+                panel.Visibility = Visibility.Visible;
+                // [Fix] 强制设置一个超高的 ZIndex，确保它遮挡所有内容，包括 Helix 3D 控件
+            }
             if (this.FindName("TxtDiagTitle") is TextBlock title)
                 title.Text = $"📡 诊断目标: {ip}";
 
@@ -6690,7 +6722,7 @@ namespace NetworkMonitor
         private void BtnCloseDiag_Click(object sender, RoutedEventArgs e)
         {
             _diagCts?.Cancel();
-            if (this.FindName("PanelIpDiagnostics") is Border panel) panel.Visibility = Visibility.Collapsed;
+            if (this.FindName("ViewDiagnostics") is Grid panel) panel.Visibility = Visibility.Collapsed;
 
             // 退出诊断模式时，恢复显示主页的流量监控视图
             ViewTraffic.Visibility = Visibility.Visible;
