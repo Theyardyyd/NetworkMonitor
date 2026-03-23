@@ -4585,7 +4585,7 @@ namespace NetworkMonitor
                 // 显示悬浮诊断窗口
                 if (PanelEarthDiagnostics != null) PanelEarthDiagnostics.Visibility = Visibility.Visible;
                 if (TxtEarthDiagTitle != null) TxtEarthDiagTitle.Text = $"📡 正在追踪: {ip}...";
-                if (LstEarthDiagSummary != null) LstEarthDiagSummary.DataContext = null;
+                if (LstEarthDiagSummary != null) LstEarthDiagSummary.ItemsSource = null;
                 if (EarthChartCanvas != null) EarthChartCanvas.Children.Clear();
 
                 TraceListPanel.Children.Add(new TextBlock { Text = $"🚀 开始追踪目标: {ip}\n", Foreground = Brushes.Yellow });
@@ -4670,7 +4670,7 @@ namespace NetworkMonitor
             }
 
             await Dispatcher.InvokeAsync(() => {
-                if (LstEarthDiagSummary != null) LstEarthDiagSummary.DataContext = bindableStatsList;
+                if (LstEarthDiagSummary != null) LstEarthDiagSummary.ItemsSource = bindableStatsList;
             });
 
             while (!token.IsCancellationRequested)
@@ -6780,11 +6780,12 @@ namespace NetworkMonitor
                 bindableStatsList.Add(nStat);
             }
 
-            // 【核心】将准备好的数据源绑定到 XAML 的 ItemsControl
+            // 【核心】将准备好的数据源绑定到 XAML 的 ItemsControl (必须用 ItemsSource 而不是 DataContext)
             Dispatcher.Invoke(() =>
             {
-                if (this.FindName("LstDiagSummary") is ItemsControl lst) lst.DataContext = bindableStatsList;
+                if (this.FindName("LstDiagSummary") is ItemsControl lst) lst.ItemsSource = bindableStatsList;
             });
+
 
             // 3. 决定是否需要基础 Traceroute
             if (monitorNodes.Count > 1)
