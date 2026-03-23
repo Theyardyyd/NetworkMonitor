@@ -4581,7 +4581,19 @@ namespace NetworkMonitor
                 _currentHops.Add(new HopData { Index = 0, IP = "Localhost", Location = "Your Device", OriginalPoint = LatLonToPoint3D(39.9, 116.4), Lat = 39.9, Lon = 116.4 });
 
                 List<string> discoveredNodes = new List<string>();
-                var lineColors = new Brush[] { Brushes.Cyan, Brushes.LimeGreen, Brushes.Yellow, Brushes.Magenta, Brushes.Orange, Brushes.Pink, Brushes.White };
+
+                var lineColors = new Brush[] {
+                     Brushes.Red,          // 红
+                     Brushes.Orange,       // 橙
+                     Brushes.Yellow,       // 黄
+                     Brushes.Lime,         // 绿 (Lime 比 Green 在深色背景下更亮)
+                     Brushes.Cyan,         // 青
+                     Brushes.DeepSkyBlue,  // 蓝 (相比标准 Blue，在黑底上更具通透感)
+                     Brushes.Violet,       // 紫
+                     Brushes.Magenta,      // 洋红 (备用色)
+                     Brushes.Pink,         // 粉 (备)
+                     Brushes.White         // 白 (末尾)
+                     };
 
                 for (int ttl = 1; ttl <= 30; ttl++)
                 {
@@ -4657,7 +4669,7 @@ namespace NetworkMonitor
             }
 
             await Dispatcher.InvokeAsync(() => {
-                if (LstEarthDiagSummary != null) LstEarthDiagSummary.DataContext = bindableStatsList;
+                if (LstEarthDiagSummary != null) LstEarthDiagSummary.ItemsSource = bindableStatsList;
             });
 
             while (!token.IsCancellationRequested)
@@ -6770,7 +6782,7 @@ namespace NetworkMonitor
             // 【核心】将准备好的数据源绑定到 XAML 的 ItemsControl
             Dispatcher.Invoke(() =>
             {
-                if (this.FindName("LstDiagSummary") is ItemsControl lst) lst.DataContext = bindableStatsList;
+                if (this.FindName("LstDiagSummary") is ItemsControl lst) lst.ItemsSource = bindableStatsList;
             });
 
             // 3. 决定是否需要基础 Traceroute
