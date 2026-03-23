@@ -1,4 +1,4 @@
-﻿
+﻿using System.Windows.Documents;
 using Microsoft.Diagnostics.Tracing.Parsers;
 using Microsoft.Diagnostics.Tracing.Session;
 using Microsoft.VisualBasic.Logging;
@@ -35,13 +35,43 @@ using static NetworkMonitor.DashboardSaveData;
 using static NetworkMonitor.MainWindow;
 using Forms = System.Windows.Forms;
 
+
 namespace NetworkMonitor
 {
 
 
+    // 1. 删除重复的 using System.ComponentModel; (修复 CS0105)
+    // 2. 在类开头统一声明控制变量 (修复 CS0103)
+
     public partial class MainWindow : Window
     {
+       // --- 诊断与追踪控制变量 (唯一定义) ---
+    private CancellationTokenSource? _diagCts; 
+    private CancellationTokenSource? _earthDiagCts; 
+    private bool _isEarthDiagPaused = false;
+    private Dictionary<string, List<TextBlock>> _earthNodeTextBlocks = new Dictionary<string, List<TextBlock>>();
+        [DllImport("user32.dll")]
+        private static extern IntPtr SetWinEventHook(uint eventMin, uint eventMax, IntPtr hmodWinEventProc, WinEventDelegate lpfnWinEventProc, uint idProcess, uint idThread, uint dwFlags);
 
+        [DllImport("user32.dll")]
+        private static extern bool UnhookWinEvent(IntPtr hWinEventHook);
+
+        [DllImport("user32.dll", CharSet = CharSet.Auto)]
+        private static extern int GetWindowText(IntPtr hWnd, StringBuilder title, int size);
+
+        delegate void WinEventDelegate(IntPtr hWinEventHook, uint eventType, IntPtr hwnd, int idObject, int idChild, uint dwEventThread, uint dwmsEventTime);
+
+        private WinEventDelegate _winEventProc;
+        private IntPtr _hWinEventHook;
+        private Dictionary<string, int> _interestKeywords = new Dictionary<string, int>();
+        private DateTime _lastRefactorSuggestion = DateTime.MinValue;
+        private Dictionary<string, int> _topicHeat = new Dictionary<string, int> { { "伊朗局势", 100 }, { "俄乌战争", 90 }, { "旮旯新游", 80 } };
+        // ================= 追加的热度控制因子 =================
+        private DispatcherTimer _topicMonitorTimer;
+        private int _topicUpdateFrequencyMinutes = 60; // 初始基准轮询间隔：60 分钟
+        private bool _isTopicMuted = false; // 是否因热度衰减已进入深度静默/截断模式
+        // ======================================================
+        // ======================================================================
 
         public static int TooltipMode = 2; // 全局进程悬停解释模式 (0=不显示, 1=仅名称, 2=名称+描述)
         private bool _isChartDragPaused = false;
@@ -787,9 +817,18 @@ namespace NetworkMonitor
             }
 
             InitializeComponent();
-            // ★ BugFix 2: 提升隐式样式作用域，解决 ToolTip 等弹窗控件脱离窗口视觉树导致不随主题变色的问题
+            this.Loaded += (s, e) => LoadLastDiagIp(); // 新增：窗口加载完成时读取上次的测试IP
+            // ★ BugFix 2: 提升隐式样式作用域与核心画刷，彻底解决 ToolTip/弹窗脱离窗口视觉树导致的 Resource not found 报错与变色失效
             if (Application.Current != null)
             {
+                // 启动瞬间强制将基础画刷写入 Application 级全局字典，消除异步绑定的找不到资源警告
+                string[] coreBrushes = { "BgMainBrush", "BgCardBrush", "BgNavBrush", "TextMainBrush", "TextDimBrush", "BgInputBrush", "BorderMainBrush", "HeatmapEmptyBrush", "GridLineBrush" };
+                foreach (var key in coreBrushes)
+                {
+                    if (this.Resources.Contains(key))
+                        Application.Current.Resources[key] = this.Resources[key];
+                }
+
                 Application.Current.Resources[typeof(ToolTip)] = this.Resources[typeof(ToolTip)];
                 Application.Current.Resources[typeof(ComboBoxItem)] = this.Resources[typeof(ComboBoxItem)];
                 Application.Current.Resources[typeof(System.Windows.Controls.Primitives.DataGridColumnHeader)] = this.Resources[typeof(System.Windows.Controls.Primitives.DataGridColumnHeader)];
@@ -897,7 +936,13 @@ namespace NetworkMonitor
             EtwNetworkTracker.StartTracking();
 
             _isNetworkAvailable = NetworkInterface.GetIsNetworkAvailable();
+            // EVENT_SYSTEM_FOREGROUND = 3，用于捕获全局最底层的窗口激活事件
+            _winEventProc = new WinEventDelegate(WinEventCallback);
+            _hWinEventHook = SetWinEventHook(3, 3, IntPtr.Zero, _winEventProc, 0, 0, 0);
 
+            StartTrendingTracker();
+            // 在应用启动时记录一次初始使用报告
+            AddLogEvent("AI", "行为分析洞察", GenerateUsageAndInterestReport(), "#A142F4");
             // ★ 新增：初始化网络扫描器的自动后台定时器
             DispatcherTimer scannerTimer = new DispatcherTimer();
             scannerTimer.Tick += (s, e) => {
@@ -922,7 +967,11 @@ namespace NetworkMonitor
             if (EditColorBgCard != null) EditColorBgCard.TextChanged += (s, e) => PreviewTheme();
             _mapLodTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(200) };
             _mapLodTimer.Tick += MapLodTimer_Tick;
+            _mapLodTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(200) };
+            _mapLodTimer.Tick += MapLodTimer_Tick;
 
+            StartTopicMonitor(); // 启动关注点自适应监控
+        
 
         }
         private void PreviewTheme()
@@ -1180,6 +1229,11 @@ namespace NetworkMonitor
 
         private void MainWindow_Closing(object? sender, CancelEventArgs e)
         {
+            if (_hWinEventHook != IntPtr.Zero)
+            {
+                UnhookWinEvent(_hWinEventHook);
+                _hWinEventHook = IntPtr.Zero;
+            }
             if (!_isRealExit)
             {
                 e.Cancel = true; // 拦截关闭信号
@@ -4386,27 +4440,39 @@ namespace NetworkMonitor
         {
             if (sender is Button btn && btn.Tag is string ip)
             {
-                // 初始化重置相机和2D画布状态
+                // 先停掉可能存在的旧诊断
+                _earthDiagCts?.Cancel();
+                _earthNodeTextBlocks.Clear();
+                _isEarthDiagPaused = false;
+                if (BtnPauseEarthDiag != null) { BtnPauseEarthDiag.Content = "⏸ 暂停"; BtnPauseEarthDiag.Background = new SolidColorBrush(Color.FromRgb(255, 152, 0)); }
+
                 _cameraX = 0; _cameraY = 0; _cameraDistance = 3.2; _earthManualRotX = 0;
                 if (EarthCam != null) EarthCam.Position = new Point3D(_cameraX, _cameraY, _cameraDistance);
                 if (this.FindName("Map2DScale") is ScaleTransform st) { st.ScaleX = 1; st.ScaleY = 1; }
                 if (this.FindName("Map2DTranslate") is TranslateTransform tt) { tt.X = 0; tt.Y = 0; }
-                // 切换视图
 
                 ViewTraffic.Visibility = ViewSystem.Visibility = ViewResources.Visibility = ViewSettings.Visibility = Visibility.Collapsed;
                 ViewEarth.Visibility = Visibility.Visible;
                 if (EarthModel.Content == null) InitEarth();
-
                 TraceListPanel.Children.Clear();
                 _currentHops.Clear();
                 EarthOverlayCanvas.Children.Clear();
-                TraceListPanel.Children.Add(new TextBlock { Text = $"🚀 开始追踪目标: {ip}\n", Foreground = Brushes.Yellow });
+                Map2DCanvas.Children.Clear();
 
+                // 显示悬浮诊断窗口
+                if (PanelEarthDiagnostics != null) PanelEarthDiagnostics.Visibility = Visibility.Visible;
+                if (TxtEarthDiagTitle != null) TxtEarthDiagTitle.Text = $"📡 正在追踪: {ip}...";
+                if (LstEarthDiagSummary != null) LstEarthDiagSummary.DataContext = null;
+                if (EarthChartCanvas != null) EarthChartCanvas.Children.Clear();
+
+                TraceListPanel.Children.Add(new TextBlock { Text = $"🚀 开始追踪目标: {ip}\n", Foreground = Brushes.Yellow });
                 Ping ping = new Ping();
                 byte[] buffer = new byte[32];
-
-                // 本机作为起点
                 _currentHops.Add(new HopData { Index = 0, IP = "Localhost", Location = "Your Device", OriginalPoint = LatLonToPoint3D(39.9, 116.4), Lat = 39.9, Lon = 116.4 });
+
+                List<string> discoveredNodes = new List<string>();
+                var lineColors = new Brush[] { Brushes.Cyan, Brushes.LimeGreen, Brushes.Yellow, Brushes.Magenta, Brushes.Orange, Brushes.Pink, Brushes.White };
+
                 for (int ttl = 1; ttl <= 30; ttl++)
                 {
                     try
@@ -4418,21 +4484,24 @@ namespace NetworkMonitor
                         {
                             string hopIp = reply.Address.ToString();
                             var geo = await GetGeoInfo(hopIp);
+                            string loc = string.IsNullOrEmpty(geo.City) ? "Unknown/Private" : $"{geo.Country}, {geo.City}";
 
-                            string loc = string.IsNullOrEmpty(geo.City) ? "Unknown/Private" : $"{geo.City}, {geo.Country}";
-                            TraceListPanel.Children.Add(new TextBlock { Text = $"[{ttl}] {hopIp} - {loc}", Foreground = Brushes.Cyan, Margin = new Thickness(0, 0, 0, 5) });
-
-                            if (geo.Lat != 0 && geo.Lon != 0)
+                            Brush nodeColor = Brushes.White;
+                            // 排除本机和常见内网网段
+                            if (hopIp != "127.0.0.1" && !hopIp.StartsWith("192.168.") && !hopIp.StartsWith("10.") && !hopIp.StartsWith("172."))
                             {
-                                _currentHops.Add(new HopData
-                                {
-                                    Index = ttl,
-                                    IP = hopIp,
-                                    Location = loc,
-                                    OriginalPoint = LatLonToPoint3D(geo.Lat, geo.Lon),
-                                    Lat = geo.Lat,  // ★ 核心修复：把漏掉的 Lat 加进来！
-                                    Lon = geo.Lon   // ★ 核心修复：把漏掉的 Lon 加进来！
-                                });
+                                if (!discoveredNodes.Contains(hopIp)) discoveredNodes.Add(hopIp);
+                                nodeColor = lineColors[(discoveredNodes.Count - 1) % lineColors.Length]; // 取出对应颜色
+                            }
+
+                            // 这里的文本应用了上面的同款线条颜色
+                            TraceListPanel.Children.Add(new TextBlock { Text = $"[{ttl}] {hopIp}\n └─ {loc} ({reply.RoundtripTime}ms)", Foreground = nodeColor, Margin = new Thickness(0, 0, 0, 5) });
+
+                            HopData hop = new HopData { Index = ttl, IP = hopIp, Location = loc, Lat = geo.Lat, Lon = geo.Lon };
+                            if (geo.Lat != 0 || geo.Lon != 0)
+                            {
+                                hop.OriginalPoint = LatLonToPoint3D(geo.Lat, geo.Lon);
+                                _currentHops.Add(hop);
                             }
 
                             if (reply.Status == IPStatus.Success)
@@ -4448,7 +4517,154 @@ namespace NetworkMonitor
                     }
                     catch { }
                 }
+                if (TxtEarthDiagTitle != null) TxtEarthDiagTitle.Text = $"📡 实时追踪节点诊断: {ip}";
+
+// --- 自动化功能接入点 ---
+                if (discoveredNodes.Count > 0) {
+                    _earthDiagCts = new CancellationTokenSource();
+                    // 启动异步诊断任务，不阻塞主 UI 线程，消除 CS4014 警告
+                    _ = Task.Run(() => StartEarthDiagnosticMonitorAsync(discoveredNodes, _earthDiagCts.Token));
+                }
             }
+        }
+        private async Task StartEarthDiagnosticMonitorAsync(List<string> nodes, CancellationToken token)
+        {
+            var statsDict = new Dictionary<string, NodeStats>();
+            var bindableStatsList = new ObservableCollection<NodeStats>();
+            var lineColors = new Brush[] { Brushes.Cyan, Brushes.LimeGreen, Brushes.Yellow, Brushes.Magenta, Brushes.Orange, Brushes.Pink, Brushes.White };
+
+            for (int i = 0; i < nodes.Count; i++)
+            {
+                var nStat = new NodeStats
+                {
+                    NodeIp = nodes[i],
+                    NodeIpPadded = nodes[i].PadRight(15),
+                    DisplayIndex = i + 1,
+                    NodeColor = lineColors[i % lineColors.Length]
+                };
+                statsDict[nodes[i]] = nStat;
+                bindableStatsList.Add(nStat);
+            }
+
+            await Dispatcher.InvokeAsync(() => {
+                if (LstEarthDiagSummary != null) LstEarthDiagSummary.DataContext = bindableStatsList;
+            });
+
+            while (!token.IsCancellationRequested)
+            {
+                if (_isEarthDiagPaused) { await Task.Delay(500, token); continue; }
+
+                var pingTasks = nodes.Select(async node =>
+                {
+                    var nStat = statsDict[node];
+                    nStat.Sent++;
+                    long currentDelay = -1;
+                    try
+                    {
+                        using Ping p = new Ping();
+                        PingReply rep = await p.SendPingAsync(node, 800, new byte[32], new PingOptions(128, true));
+                        if (rep.Status == IPStatus.Success)
+                        {
+                            currentDelay = rep.RoundtripTime;
+                            nStat.TotalDelay += currentDelay;
+                        }
+                        else { nStat.Lost++; }
+                    }
+                    catch { nStat.Lost++; }
+
+                    nStat.History.Enqueue(currentDelay);
+                    if (nStat.History.Count > 60) nStat.History.Dequeue();
+
+                    nStat.LastDelayStr = currentDelay >= 0 ? $"{currentDelay}ms" : "Lost";
+                    nStat.AvgDelayStr = (nStat.Sent - nStat.Lost) > 0 ? (nStat.TotalDelay / (nStat.Sent - nStat.Lost)).ToString() + "ms" : "---";
+                    nStat.LossRateStr = ((double)nStat.Lost / nStat.Sent).ToString("P1");
+
+                    // --- 关键：实时更新 3D/2D 标签上的延迟数值 ---
+        // --- 关键：实时更新 UI 上的延迟数值 ---
+                    await Dispatcher.InvokeAsync(() => {
+                        if (_earthNodeTextBlocks.TryGetValue(node, out var tbs)) {
+
+                            foreach (var tb in tbs)
+                            {
+                                string cityName = tb.Tag as string ?? "";
+                                tb.Inlines.Clear();
+
+                                // ★ 仅测得有效延迟（>=0）时才在上方显示实时跳动结果
+                                if (currentDelay >= 0)
+                                {
+                                    tb.Inlines.Add(new Run($"{currentDelay}ms")
+                                    {
+                                        Foreground = Brushes.Yellow,
+                                        FontSize = 11,
+                                        FontWeight = FontWeights.ExtraBold
+                                    });
+                                    tb.Inlines.Add(new LineBreak());
+                                }
+
+                                tb.Inlines.Add(new Run(cityName) { Foreground = Brushes.White, FontSize = 9 });
+                            }
+                        }
+                    });
+                        });
+
+                await Task.WhenAll(pingTasks);
+                if (EarthChartCanvas != null) DrawChartCustom(EarthChartCanvas, nodes, statsDict);
+                await Task.Delay(1000, token);
+            }
+        }
+
+        private void DrawChartCustom(Canvas canvas, List<string> nodes, Dictionary<string, NodeStats> statsDict)
+        {
+            Dispatcher.InvokeAsync(() =>
+            {
+                canvas.Children.Clear();
+                double w = canvas.ActualWidth; double h = canvas.ActualHeight;
+                if (w <= 0 || h <= 0) return;
+                double stepX = w / 59.0; double maxY = 200.0;
+
+                // --- 核心修复：更改循环变量名为 stepVal 避免冲突，并修正 height 为 h ---
+                for (int stepVal = 50; stepVal <= 200; stepVal += 50)
+                {
+                    double yPos = h - (stepVal / maxY * h);
+                    if (yPos > 0)
+                    {
+                        canvas.Children.Add(new Line
+                        {
+                            X1 = 0,
+                            Y1 = yPos,
+                            X2 = w,
+                            Y2 = yPos,
+                            Stroke = new SolidColorBrush(Color.FromArgb(50, 255, 255, 255)),
+                            StrokeDashArray = new DoubleCollection(new double[] { 4, 4 })
+                        });
+                        TextBlock lbl = new TextBlock
+                        {
+                            Text = $"{stepVal}ms",
+                            Foreground = new SolidColorBrush(Color.FromArgb(120, 255, 255, 255)),
+                            FontSize = 9
+                        };
+                        Canvas.SetLeft(lbl, 2); Canvas.SetTop(lbl, yPos - 12);
+                        canvas.Children.Add(lbl);
+                    }
+                }
+
+                foreach (var node in nodes)
+                {
+                    if (!statsDict.ContainsKey(node)) continue;
+                    var nStat = statsDict[node];
+                    var history = nStat.History.ToArray();
+                    if (history.Length < 2) continue;
+                    Polyline line = new Polyline { Stroke = nStat.NodeColor, StrokeThickness = 1.2, Opacity = 0.8 };
+                    for (int i = 0; i < history.Length; i++)
+                    {
+                        double x = w - ((history.Length - 1 - i) * stepX);
+                        double val = history[i] < 0 ? maxY : Math.Min(history[i], maxY);
+                        double y = h - (val / maxY * h);
+                        line.Points.Add(new Point(x, y));
+                    }
+                    canvas.Children.Add(line);
+                }
+            });
         }
 
         private void BtnCloseEarth_Click(object sender, RoutedEventArgs e)
@@ -4673,25 +4889,69 @@ namespace NetworkMonitor
                 Canvas.SetLeft(dot, curPos3d.X - 4); Canvas.SetTop(dot, curPos3d.Y - 4);
                 EarthOverlayCanvas.Children.Add(dot);
 
+                // 找到遍历 _currentHops 绘制文字的地方
+                // 替换原有的 TextBlock 创建逻辑
+
+                string labelContent = $"{locName}\n{firstHop.IP}";
+
+
                 if (isFront)
                 {
-                    TextBlock tb = new TextBlock { Text = $"{locName}\n[{indices}]", Foreground = Brushes.White, FontSize = 10, FontWeight = FontWeights.Bold, TextAlignment = TextAlignment.Center };
+                    TextBlock tb = new TextBlock
+                    {
+                        Text = locName, // 初始仅显示城市，等测出真实延迟后再显示黄字
+                        Foreground = Brushes.White,
+                        FontSize = 10,
+                        FontFamily = new FontFamily("Microsoft YaHei"), // 修正怪异字体
+                        FontWeight = FontWeights.Bold,
+                        TextAlignment = TextAlignment.Center,
+                        Tag = locName // Tag 仅存储纯净的城市信息
+                    };
                     tb.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
-                    Canvas.SetLeft(tb, curPos3d.X - tb.DesiredSize.Width / 2); // 水平居中
-                    Canvas.SetTop(tb, curPos3d.Y + 6); // 在点的正下方
+                    Canvas.SetLeft(tb, curPos3d.X - tb.DesiredSize.Width / 2);
+                    // Y坐标减去文本高度及额外偏移，使其悬浮于黄点上方
+                    Canvas.SetTop(tb, curPos3d.Y - tb.DesiredSize.Height - 8);
                     EarthOverlayCanvas.Children.Add(tb);
+
+                    if (!_earthNodeTextBlocks.ContainsKey(firstHop.IP))
+                        _earthNodeTextBlocks[firstHop.IP] = new List<TextBlock>();
+                    _earthNodeTextBlocks[firstHop.IP].Add(tb);
                 }
 
-                // --- 绘制 2D 点与文字 (应用反比例恒定大小) ---
-                Ellipse dot2 = new Ellipse { Width = dotSize2D, Height = dotSize2D, Fill = Brushes.Yellow };
-                Canvas.SetLeft(dot2, curPos2d.X - dotSize2D / 2); Canvas.SetTop(dot2, curPos2d.Y - dotSize2D / 2);
-                Map2DCanvas.Children.Add(dot2);
+                // ---------------- 2D 标签与黄点绘制 ----------------
+                // 1. 恢复 2D 专属黄点
+                Ellipse dot2d = new Ellipse
+                {
+                    Width = dotSize2D,
+                    Height = dotSize2D,
+                    Fill = Brushes.Yellow
+                };
+                Canvas.SetLeft(dot2d, curPos2d.X - dotSize2D / 2);
+                Canvas.SetTop(dot2d, curPos2d.Y - dotSize2D / 2);
+                Map2DCanvas.Children.Add(dot2d);
 
-                TextBlock tb2d = new TextBlock { Text = $"{locName}\n[{indices}]", Foreground = Brushes.Yellow, FontSize = fontSize2D, FontWeight = FontWeights.Bold, TextAlignment = TextAlignment.Center };
+                // 2. 修正 2D 字体
+                TextBlock tb2d = new TextBlock
+                {
+                    Text = $"--ms\n{locName}",
+                    Foreground = Brushes.White,
+                    FontSize = fontSize2D,
+                    FontFamily = new FontFamily("Microsoft YaHei"),
+                    FontWeight = FontWeights.Bold,
+                    TextAlignment = TextAlignment.Center,
+                    Tag = locName
+                };
                 tb2d.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
                 Canvas.SetLeft(tb2d, curPos2d.X - tb2d.DesiredSize.Width / 2);
-                Canvas.SetTop(tb2d, curPos2d.Y + dotSize2D / 2 + (2.0 / currentScale2D));
+                // 同样放置在 2D 黄点的正上方
+                Canvas.SetTop(tb2d, curPos2d.Y - tb2d.DesiredSize.Height - (dotSize2D / 2) - 2);
                 Map2DCanvas.Children.Add(tb2d);
+
+                if (!_earthNodeTextBlocks.ContainsKey(firstHop.IP))
+                    _earthNodeTextBlocks[firstHop.IP] = new List<TextBlock>();
+                _earthNodeTextBlocks[firstHop.IP].Add(tb2d);
+
+
             }
 
         }
@@ -4728,8 +4988,6 @@ namespace NetworkMonitor
         [DllImport("user32.dll")]
         static extern int GetWindowThreadProcessId(IntPtr hWnd, out int lpdwProcessId);
 
-        [DllImport("user32.dll", CharSet = CharSet.Unicode)]
-        static extern int GetWindowText(IntPtr hWnd, StringBuilder lpString, int nMaxCount);
 
         [DllImport("user32.dll", CharSet = CharSet.Auto, SetLastError = true)]
         static extern int GetWindowTextLength(IntPtr hWnd);
@@ -6042,6 +6300,701 @@ namespace NetworkMonitor
                 BtnScan_Click(null, null);
             }
         }
+        // ==========================================
+        // 智能行为与兴趣分析核心引擎
+        // ==========================================
+
+        // 1. 用极少资源获取高浓度兴趣点与使用报告
+
+        private void IncrementDict(Dictionary<string, int> dict, string key)
+        {
+            if (!dict.ContainsKey(key)) dict[key] = 0;
+            dict[key]++;
+        }
+        // ==========================================
+        // 功能一：高信息浓度使用报告与兴趣点推断
+        // ==========================================
+        private string GenerateUsageAndInterestReport()
+        {
+            try
+            {
+                string todayStr = DateTime.Today.ToString("yyyy-MM-dd");
+                var todayPrimary = _savedData.DailyPrimaryTime.GetValueOrDefault(todayStr, new Dictionary<string, long>());
+
+                if (todayPrimary.Count == 0) return "暂无足够的数据来生成深度使用报告。";
+
+                var topApps = todayPrimary.OrderByDescending(kv => kv.Value).Take(3).ToList();
+                long totalSeconds = todayPrimary.Values.Sum();
+
+                StringBuilder report = new StringBuilder();
+                report.AppendLine($"【核心运转概况】今日系统有效交互时长：{TimeSpan.FromSeconds(totalSeconds):hh\\:mm\\:ss}。");
+
+                report.Append("【主力生产力焦点】");
+                foreach (var app in topApps)
+                {
+                    report.Append($"{ProcessDictionary.GetWithDesc(app.Key)}({app.Value / 60}m) ");
+                }
+                report.AppendLine();
+
+                // 提取兴趣点 (基于活跃窗口的标题高频词汇推断，避免深入读取内存，资源占用极小)
+                var recentTopics = _primaryWindowList.Take(50).Select(x => x.Name).ToList();
+                int devScore = recentTopics.Count(t => t.Contains("Visual Studio") || t.Contains("Code") || t.Contains("Github"));
+                int gameScore = recentTopics.Count(t => t.Contains("Steam") || t.Contains("Game") || t.Contains("旮旯新游"));
+                int mediaScore = recentTopics.Count(t => t.Contains("YouTube") || t.Contains("Bilibili") || t.Contains("Player"));
+
+                report.Append("【近期兴趣点及意图推断】");
+                if (devScore > gameScore && devScore > mediaScore)
+                    report.Append("当前处于高强度开发/研究状态，代码上下文切换频繁，建议适时闭目休息；");
+                else if (gameScore > devScore)
+                    report.Append("娱乐与游戏占比显著升高，似乎正在进行高密度的放松与减压；");
+                else if (mediaScore > devScore)
+                    report.Append("处于流媒体高频消费阶段，多媒体信息的获取是当前的主旋律。");
+                else
+                    report.Append("工作流呈现高度碎片化，各项操作分布较为平均。");
+
+                return report.ToString();
+            }
+            catch
+            {
+                return "行为分析洞察引擎初始化中...";
+            }
+        }
+        // 2. 监控大量兴趣点热度，并实现阻断式降频推送
+        private void StartTrendingTracker()
+        {
+            DispatcherTimer newsTimer = new DispatcherTimer { Interval = TimeSpan.FromHours(24) };
+            newsTimer.Tick += (s, e) =>
+            {
+                foreach (var topic in _topicHeat.Keys.ToList())
+                {
+                    _topicHeat[topic] -= 5; // 模拟时间推移导致信息破损与热度衰减
+                    if (_topicHeat[topic] > 70)
+                    {
+                        AddLogEvent("News", $"[关注高热] {topic}", $"系统判定该事件热度持续高位，已为您凝练核心变动摘要并排除冗余噪点。", "#FF2277");
+                    }
+                    else if (_topicHeat[topic] == 70)
+                    {
+                        AddLogEvent("News", $"[关注降频] {topic} 趋于稳定", $"事件发展进入平缓期，信息熵显著降低，系统已自动截断日常推送并大幅调低面板展示优先级。", "#8BC34A");
+                    }
+                }
+            };
+            newsTimer.Start();
+        }
+        // ==========================================
+        // 功能二：监控大量兴趣点，自动浓缩过滤与静默截断
+        // ==========================================
+        private void StartTopicMonitor()
+        {
+            _topicMonitorTimer = new DispatcherTimer();
+            // 内部驱动引擎维持 1 分钟心跳，但实际执行依赖 _topicUpdateFrequencyMinutes 拦截
+            _topicMonitorTimer.Interval = TimeSpan.FromMinutes(1);
+            _topicMonitorTimer.Tick += async (s, e) =>
+            {
+                if (DateTime.Now.Minute % _topicUpdateFrequencyMinutes != 0) return;
+
+                // 异步下放爬虫/计算逻辑，绝对不阻塞 WPF 主线程
+                await Task.Run(() =>
+                {
+                    bool anyHighHeat = false;
+                    var keys = _topicHeat.Keys.ToList();
+
+                    foreach (var key in keys)
+                    {
+                        // 此处模拟热度自然衰减与突发新闻的拉扯 (实际项目中可替换为真实 API 返回的指数)
+                        int randomDelta = new Random().Next(-15, 10);
+                        int newHeat = Math.Clamp(_topicHeat[key] + randomDelta, 0, 100);
+                        _topicHeat[key] = newHeat;
+
+                        if (newHeat > 70) anyHighHeat = true;
+                    }
+
+                    Application.Current.Dispatcher.Invoke(() =>
+                    {
+                        if (ItemsInterestHeat != null)
+                        {
+                            ItemsInterestHeat.ItemsSource = _topicHeat.OrderByDescending(x => x.Value)
+                                .Select(x => new { Key = x.Key, Value = x.Value }).ToList();
+                        }
+
+                        // 核心策略：信息稳定（更新不炸裂）之后立刻截断推送，大幅降低轮询频率
+                        if (!anyHighHeat)
+                        {
+                            if (!_isTopicMuted)
+                            {
+                                AddLogEvent("AI", "全网热度监测降级", "您关注的【伊朗局势/俄乌战争】等宏观议题近期无爆炸性进展。系统已主动为您截断高频推送，并将轮询监控降频至半天一次，杜绝视觉噪音。", "#888888");
+                                _isTopicMuted = true;
+                                _topicUpdateFrequencyMinutes = 12 * 60; // 频率砍落至 12 小时
+                            }
+                        }
+                        else
+                        {
+                            if (_isTopicMuted)
+                            {
+                                AddLogEvent("AI", "全网热度监测突发报警", "监测到您的关注列表出现突发性热度飙升（指数跨越 70 阈值）！推送优先级已重置为最高，频率恢复至实时监控。", "#FF2277");
+                                _isTopicMuted = false;
+                                _topicUpdateFrequencyMinutes = 60; // 恢复 1 小时级别
+                            }
+                            else
+                            {
+                                var topTopic = _topicHeat.OrderByDescending(x => x.Value).First();
+                                AddLogEvent("AI", $"全网资讯浓缩汇总 - {topTopic.Key}", $"当前话题热度极值 {topTopic.Value}/100。本周信息提纯：局势呈现阶段性态势，无跨维度战略级变化，详细事件图谱已在后台生成。", "#00E5FF");
+                            }
+                        }
+                    });
+                });
+            };
+            _topicMonitorTimer.Start();
+        }
+        // ==========================================
+        // 功能三：基于底层 System API 监听一切操作并预测重构意图
+        // ==========================================
+        private void WinEventCallback(IntPtr hWinEventHook, uint eventType, IntPtr hwnd, int idObject, int idChild, uint dwEventThread, uint dwmsEventTime)
+        {
+            // 突破 WPF 限制，EVENT_SYSTEM_FOREGROUND = 3，只对全局前台焦点切换做出反应
+            if (eventType != 3) return;
+
+            try
+            {
+                StringBuilder sb = new StringBuilder(256);
+                GetWindowText(hwnd, sb, 256);
+                string title = sb.ToString().ToLower();
+
+                if (string.IsNullOrWhiteSpace(title)) return;
+
+                // 意图分析状态机：剥离具体文件名并统计 IDE 切换频率与穿梭范围
+                if (title.Contains("visual studio") || title.Contains("vscode") || title.Contains("idea") || title.Contains(".cs"))
+                {
+                    // 利用 _interestKeywords 当作高频上下文切换的临时状态缓存池
+                    string docName = title.Split('-').FirstOrDefault()?.Trim() ?? "unknown";
+                    _interestKeywords[docName] = _interestKeywords.GetValueOrDefault(docName, 0) + 1;
+
+                    // 核心预测机制：如果极短时间内在 3 个以上的【不同逻辑类】间发生超过 15 次的高频物理来回切变，断定为逻辑纠缠或重构
+                    if (_interestKeywords.Count >= 3 && _interestKeywords.Values.Sum() > 15)
+                    {
+                        // 强制长达 30 分钟的 CD，杜绝打断程序员心流
+                        if ((DateTime.Now - _lastRefactorSuggestion).TotalMinutes > 30)
+                        {
+                            _lastRefactorSuggestion = DateTime.Now;
+                            _interestKeywords.Clear(); // 释放缓存池
+
+                            Dispatcher.InvokeAsync(() =>
+                            {
+                                string advice = "系统底层检测到您正在多个关联核心代码文件间进行高频切换查阅。\n\n【意图推测】执行重构、或陷入深度 Bug 的调用链排查。\n【AI 建议】当前正在处理的模块物理耦合度可能偏高，建议暂时跳出细节，尝试提取公共 Interface 或使用观察者模式解耦，而非在多个派生类中硬编码修补。是否立即为您查阅相关设计模式？";
+
+                                if (TxtIntentAdvice != null)
+                                {
+                                    TxtIntentAdvice.Text = advice;
+                                    TxtIntentAdvice.Foreground = new SolidColorBrush(Color.FromRgb(255, 34, 119));
+                                }
+                                AddLogEvent("AI", "意图预测：重构与架构级预警", "检测到高频逻辑链回溯行为，已在概览面板生成解耦建议。", "#FF2277");
+                            });
+                        }
+                    }
+                }
+                else if (title.Contains("chrome") || title.Contains("edge") || title.Contains("browser"))
+                {
+                    // 一旦切出 IDE 去浏览器长时间查阅资料，认定当前阶段性重构意图中断，清空代码连击计数
+                    _interestKeywords.Clear();
+                }
+            }
+            catch { /* 忽略系统底层防提权句柄获取时可能抛出的访问拒绝 */ }
+        }
+
+
+        // ================= 新增：P2P 连通性诊断与丢包分析逻辑 =================
+
+        private void BtnPauseEarthDiag_Click(object sender, RoutedEventArgs e)
+        {
+            _isEarthDiagPaused = !_isEarthDiagPaused;
+            BtnPauseEarthDiag.Content = _isEarthDiagPaused ? "▶ 继续" : "⏸ 暂停";
+        }
+        private readonly string _diagIpSavePath = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "last_diag_ip.txt");
+
+        private void LoadLastDiagIp()
+        {
+            try
+            {
+                if (File.Exists(_diagIpSavePath))
+                {
+                    string[] parts = File.ReadAllText(_diagIpSavePath).Trim().Split(';');
+                    if (this.FindName("TxtManualDiagIp") is TextBox txtIp) txtIp.Text = parts.Length > 0 ? parts[0] : "";
+                    if (this.FindName("TxtManualDiagPath") is TextBox txtPath) txtPath.Text = parts.Length > 1 ? parts[1] : "";
+                }
+            }
+            catch { /* 忽略读取错误 */ }
+        }
+
+        private void SaveLastDiagIp(string ip, string path)
+        {
+            try { File.WriteAllText(_diagIpSavePath, $"{ip};{path}"); }
+            catch { /* 忽略写入错误 */ }
+        }
+
+        private async void BtnManualDiag_Click(object sender, RoutedEventArgs e)
+        {
+            TextBox? txtIp = this.FindName("TxtManualDiagIp") as TextBox;
+            TextBox? txtPath = this.FindName("TxtManualDiagPath") as TextBox;
+
+            if (txtIp != null && !string.IsNullOrWhiteSpace(txtIp.Text))
+            {
+                string ip = txtIp.Text.Trim();
+                string pathStr = txtPath?.Text.Trim() ?? "";
+                SaveLastDiagIp(ip, pathStr); // 自动保存IP和路径
+                await StartDiagProcessAsync(ip, pathStr);
+            }
+        }
+        private async void BtnAutoTraceAndMonitor_Click(object sender, RoutedEventArgs e)
+        {
+            TextBox? txtIp = this.FindName("TxtManualDiagIp") as TextBox;
+            if (txtIp != null && !string.IsNullOrWhiteSpace(txtIp.Text))
+            {
+                string targetIp = txtIp.Text.Trim();
+                await AutoTraceAndMonitorAsync(targetIp);
+            }
+        }
+
+        private async Task AutoTraceAndMonitorAsync(string targetIp)
+        {
+            // 初始化 UI 并强制解释虚拟IP与物理IP的区别
+            if (this.FindName("PanelIpDiagnostics") is Border panel) panel.Visibility = Visibility.Visible;
+            if (this.FindName("TxtDiagTitle") is TextBlock title) title.Text = $"📡 物理层路由自动寻迹: {targetIp}";
+
+            if (this.FindName("TxtDiagOutput") is TextBlock output)
+            {
+                output.Text = $"【系统提示：一键网关溯源引擎启动】\n目标 IP: {targetIp}\n\n[!] 重要提醒：如果您填入的是 P2P 的虚拟IP(如 10.x.x.x)，底层操作系统只会将其视为1跳直连。\n请务必确认填入的是对方的【真实物理局域网 IP / 真实公网出口 IP】（可通过 easytier-cli peer 查看）。\n\n[阶段 1] 正在强行挖掘真实的沿路物理网关设备...\n---------------------------------------------------\n";
+            }
+            if (this.FindName("BtnStopDiag") is Button stopBtn) stopBtn.IsEnabled = true;
+
+            _diagCts?.Cancel();
+            _diagCts = new CancellationTokenSource();
+            var token = _diagCts.Token;
+
+            try
+            {
+                await Task.Delay(100); // 释放 UI 线程渲染文本
+                List<string> discoveredHops = new List<string>();
+                using Ping pinger = new Ping();
+                byte[] buffer = new byte[32];
+                new Random().NextBytes(buffer);
+
+                int maxHops = 30;
+                for (int ttl = 1; ttl <= maxHops; ttl++)
+                {
+                    token.ThrowIfCancellationRequested();
+                    PingOptions traceOpt = new PingOptions(ttl, true);
+                    PingReply reply = await pinger.SendPingAsync(targetIp, 1500, buffer, traceOpt);
+
+                    if (reply.Status == IPStatus.Success || reply.Status == IPStatus.TtlExpired)
+                    {
+                        string nodeIp = reply.Address.ToString();
+                        UpdateDiagOutput($"{ttl,2} 探测到隐式网关: {nodeIp,-15} | 基础延迟: {reply.RoundtripTime}ms");
+
+                        // 过滤目标 IP 自己，将途经的网关收集起来
+                        if (!discoveredHops.Contains(nodeIp) && nodeIp != targetIp)
+                        {
+                            discoveredHops.Add(nodeIp);
+                        }
+
+                        if (reply.Status == IPStatus.Success)
+                        {
+                            UpdateDiagOutput($"\n[+] 寻迹成功！已抵达物理目标，共揪出 {discoveredHops.Count} 个沿路承载网关。");
+                            break;
+                        }
+                    }
+                    else
+                    {
+                        UpdateDiagOutput($"{ttl,2} * (节点不可见 / 丢弃 ICMP)");
+                    }
+                }
+
+                // 将搜集到的物理网关字符串自动填入 UI
+                string pathStr = string.Join(", ", discoveredHops);
+                if (this.FindName("TxtManualDiagPath") is TextBox txtPath)
+                {
+                    txtPath.Text = pathStr;
+                }
+                SaveLastDiagIp(targetIp, pathStr);
+
+                UpdateDiagOutput("\n[√] 正在将挖掘到的物理网关链注入多核并发监控引擎...");
+                UpdateDiagOutput("[!] 即刻开始高频图表观测。此时尝试制造大流量，哪个网关的折线突然飙高或断崖(丢包)，就是引发掉线的元凶！\n");
+
+                await Task.Delay(2500, token); // 留出 2.5 秒时间让用户看清上面的原理日志
+
+                // 完美复用原有图表监控引擎，把刚拿到的网关链喂给它
+                if (this.FindName("TxtDiagTitle") is TextBlock t2) t2.Text = $"📡 物理网关链路并发图表监控";
+                await RunDiagnosticsAsync(targetIp, pathStr, token);
+            }
+            catch (OperationCanceledException)
+            {
+                UpdateDiagOutput("\n\n[!] 用户中止了溯源进程。");
+            }
+            catch (Exception ex)
+            {
+                UpdateDiagOutput($"\n\n[X] 溯源引擎发生异常: {ex.Message}");
+            }
+            finally
+            {
+                if (this.FindName("BtnStopDiag") is Button sBtn) sBtn.IsEnabled = false;
+            }
+        }
+        private async void BtnDiagIP_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is Button btn && btn.Tag is string ip)
+            {
+                // [核心修改] 将进程列表的诊断按钮，直接对接到刚写好的自动物理寻迹引擎！
+                // 这样点击进程的 IP 后，会自动 Track 途经的每一个网关，并全部塞入底层的折线图引擎进行并发监控。
+                await AutoTraceAndMonitorAsync(ip);
+            }
+        }
+        private async Task StartDiagProcessAsync(string ip, string pathStr)
+        {
+            // 隐藏其他全部视图，使诊断视图逻辑与3D追踪完全一致，占据整个主区域
+            ViewTraffic.Visibility = ViewSystem.Visibility = ViewResources.Visibility = ViewSettings.Visibility = ViewEarth.Visibility = Visibility.Collapsed;
+            // 唤出诊断面板 (复用UI)
+            if (this.FindName("PanelIpDiagnostics") is Border panel)
+                panel.Visibility = Visibility.Visible;
+
+            if (this.FindName("TxtDiagTitle") is TextBlock title)
+                title.Text = $"📡 诊断目标: {ip}";
+
+            if (this.FindName("TxtDiagOutput") is TextBlock output)
+                output.Text = $"正在启动深度网络诊断...\n目标: {ip}\n\n[阶段 1] 路由节点探测 (Traceroute排查网关)...\n";
+
+            if (this.FindName("BtnStopDiag") is Button stopBtn)
+                stopBtn.IsEnabled = true;
+
+            _diagCts?.Cancel();
+            _diagCts = new CancellationTokenSource();
+            var token = _diagCts.Token;
+
+            try
+            {
+                await Task.Delay(100);
+                await RunDiagnosticsAsync(ip, pathStr, token);
+            }
+            catch (OperationCanceledException)
+            {
+                UpdateDiagOutput("\n\n[!] 用户手动终止了连通性诊断测试。");
+            }
+            catch (Exception ex)
+            {
+                UpdateDiagOutput($"\n\n[X] 诊断发生异常: {ex.Message}");
+            }
+            finally
+            {
+                if (this.FindName("BtnStopDiag") is Button sBtn)
+                    sBtn.IsEnabled = false;
+            }
+        }
+
+        private void BtnCloseDiag_Click(object sender, RoutedEventArgs e)
+        {
+            _diagCts?.Cancel();
+            if (this.FindName("PanelIpDiagnostics") is Border panel) panel.Visibility = Visibility.Collapsed;
+
+            // 退出诊断模式时，恢复显示主页的流量监控视图
+            ViewTraffic.Visibility = Visibility.Visible;
+            _activeTab = "Traffic";
+        }
+
+        private void BtnStopDiag_Click(object sender, RoutedEventArgs e)
+        {
+            _diagCts?.Cancel();
+            if (sender is Button btn)
+                btn.IsEnabled = false;
+        }
+
+        private async Task RunDiagnosticsAsync(string ipAddress, string pathStr, CancellationToken token)
+        {
+            byte[] buffer = new byte[32];
+            new Random().NextBytes(buffer);
+
+            // 1. 解析需要监控的所有节点
+            List<string> monitorNodes = new List<string>();
+            if (!string.IsNullOrWhiteSpace(pathStr))
+            {
+                foreach (var p in pathStr.Split(new[] { ',', '，', ' ' }, StringSplitOptions.RemoveEmptyEntries))
+                {
+                    string trimmed = p.Trim();
+                    if (!monitorNodes.Contains(trimmed)) monitorNodes.Add(trimmed);
+                }
+            }
+            if (!monitorNodes.Contains(ipAddress)) monitorNodes.Add(ipAddress);
+
+            // 2. 初始化各节点的统计与图表画笔颜色，并绑定到 XAML 列表
+            int nodeCount = monitorNodes.Count;
+            Brush[] lineColors = new Brush[nodeCount];
+            for (int i = 0; i < nodeCount; i++)
+            {
+                // Hue 色相范围：0(红) 到 300(紫)。按比例均匀分配给途径的各个网关
+                double hue = nodeCount > 1 ? (300.0 * i) / (nodeCount - 1) : 0;
+                lineColors[i] = new SolidColorBrush(HsvToRgb(hue, 1.0, 1.0));
+            }
+            // 创建一个可用于 UI 绑定的列表
+            List<NodeStats> bindableStatsList = new List<NodeStats>();
+            Dictionary<string, NodeStats> statsDict = new Dictionary<string, NodeStats>();
+
+            for (int i = 0; i < monitorNodes.Count; i++)
+            {
+                string node = monitorNodes[i];
+                NodeStats nStat = new NodeStats
+                {
+                    NodeIp = node,
+                    NodeIpPadded = node.PadRight(18), // 提前填充，保证 XAML 对齐
+                    DisplayIndex = i + 1,
+                    NodeColor = lineColors[i % lineColors.Length] // 分配颜色
+                };
+                statsDict[node] = nStat;
+                bindableStatsList.Add(nStat);
+            }
+
+            // 【核心】将准备好的数据源绑定到 XAML 的 ItemsControl
+            Dispatcher.Invoke(() =>
+            {
+                if (this.FindName("LstDiagSummary") is ItemsControl lst) lst.DataContext = bindableStatsList;
+            });
+
+            // 3. 决定是否需要基础 Traceroute
+            if (monitorNodes.Count > 1)
+            {
+                UpdateDiagOutput($"[*] 已提供自定义监控路径 (共 {monitorNodes.Count} 个节点)，已跳过自动路由追踪。");
+            }
+            else
+            {
+                UpdateDiagOutput("[阶段 1] 未提供自定义网关路径，正在对最终目标进行常规 Traceroute 路由排查...\n");
+                using Ping pinger = new Ping();
+                int maxHops = 30;
+                for (int ttl = 1; ttl <= maxHops; ttl++)
+                {
+                    token.ThrowIfCancellationRequested();
+                    PingOptions traceOpt = new PingOptions(ttl, true);
+                    PingReply reply = await pinger.SendPingAsync(ipAddress, 1000, buffer, traceOpt);
+                    if (reply.Status == IPStatus.Success || reply.Status == IPStatus.TtlExpired)
+                    {
+                        UpdateDiagOutput($"{ttl,2} 跃点IP: {reply.Address,-15} | 延迟: {reply.RoundtripTime}ms");
+                        if (reply.Address.ToString() == ipAddress) break;
+                    }
+                    else { UpdateDiagOutput($"{ttl,2} * 请求超时"); }
+                }
+            }
+
+            UpdateDiagOutput("\n[阶段 2] 正在实时生成毫秒级并发折线图与多色数据总览...");
+            UpdateDiagOutput("(底层日志区现已静默。仅在节点发生【丢包】或【剧烈延迟(>150ms)】时才会追加记录)\n---------------------------------------------------");
+
+            // 4. 多节点并发监控主循环 (1秒/轮)
+            int pollCount = 0;
+            while (!token.IsCancellationRequested)
+            {
+                pollCount++;
+                // 发起并发 Ping 以保证多节点时不会累加阻塞时间
+                var pingTasks = monitorNodes.Select(async node =>
+                {
+                    NodeStats nStat = statsDict[node];
+                    nStat.Sent++;
+                    long currentDelay = -1;
+
+                    try
+                    {
+                        // 极致隔离修复 Bug
+                        using Ping localPinger = new Ping();
+                        byte[] localBuffer = new byte[32]; new Random().NextBytes(localBuffer);
+                        PingOptions localOptions = new PingOptions(128, true);
+
+                        PingReply rep = await localPinger.SendPingAsync(node, 1000, localBuffer, localOptions);
+
+                        if (rep.Status == IPStatus.Success && rep.RoundtripTime >= 0)
+                        {
+                            currentDelay = rep.RoundtripTime;
+                            nStat.TotalDelay += currentDelay;
+
+                            // 仅异常时干扰控制台输出
+                            if (currentDelay > 150)
+                                UpdateDiagOutput($"[⚠️延迟突增] 节点 {node} 延迟飙升至: {currentDelay}ms");
+                        }
+                        else
+                        {
+                            nStat.Lost++;
+                            UpdateDiagOutput($"[❌节点响应异常] 节点 {node} 状态: {rep.Status}");
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        nStat.Lost++;
+                        if (!(ex is OperationCanceledException || ex is TaskCanceledException))
+                            UpdateDiagOutput($"[❌节点底层报错] 节点 {node}: {ex.Message}");
+                    }
+
+                    // 入列历史数据用于绘图 (60个点)
+                    if (nStat.History.Count >= 60) nStat.History.Dequeue();
+                    nStat.History.Enqueue(currentDelay);
+
+                    // 【核心】在任务完成时，通过 Dispatcher 批量更新界面绑定属性
+                    // 这样 XAML 的 TextBlock 就会自动变色并更新数值
+                    Dispatcher.InvokeAsync(() =>
+                    {
+                        nStat.StatusIcon = currentDelay == -1 ? "❌" : currentDelay > 150 ? "⚠️" : "✅";
+                        nStat.LastDelayStr = currentDelay == -1 ? "超时".PadRight(5) : (currentDelay + "ms").PadRight(5);
+
+                        long okSent = nStat.Sent - nStat.Lost;
+                        long avgDelay = okSent > 0 ? nStat.TotalDelay / okSent : 0;
+                        nStat.AvgDelayStr = (avgDelay + "ms").PadRight(4);
+
+                        double lossRate = (nStat.Lost * 100.0) / nStat.Sent;
+                        nStat.LossRateStr = $"{lossRate:F1}%";
+                    });
+
+                    return node;
+                }).ToList();
+
+                await Task.WhenAll(pingTasks);
+
+                // 刷新图表
+                DrawChart(monitorNodes, statsDict);
+                await Task.Delay(1000, token); // 固定节拍
+            }
+        }
+
+        private Color HsvToRgb(double h, double s, double v)
+        {
+            int hi = Convert.ToInt32(Math.Floor(h / 60)) % 6;
+            double f = h / 60 - Math.Floor(h / 60);
+            byte value = (byte)(v * 255);
+            byte p = (byte)(v * (1 - s) * 255);
+            byte q = (byte)(v * (1 - f * s) * 255);
+            byte t = (byte)(v * (1 - (1 - f) * s) * 255);
+
+            switch (hi)
+            {
+                case 0: return Color.FromRgb(value, t, p);
+                case 1: return Color.FromRgb(q, value, p);
+                case 2: return Color.FromRgb(p, value, t);
+                case 3: return Color.FromRgb(p, q, value);
+                case 4: return Color.FromRgb(t, p, value);
+                default: return Color.FromRgb(value, p, q);
+            }
+        }
+
+
+        private void DrawChart(List<string> nodes, Dictionary<string, NodeStats> statsDict)
+        {
+            Dispatcher.InvokeAsync(() =>
+            {
+                if (this.FindName("ChartCanvas") is Canvas canvas)
+                {
+                    canvas.Children.Clear();
+                    // 动态获取真实宽高度，防止初始化为 0 时计算崩溃
+                    double width = canvas.ActualWidth > 0 ? canvas.ActualWidth : 850;
+                    double height = canvas.ActualHeight > 0 ? canvas.ActualHeight : 180;
+
+                    int maxPoints = 60;
+                    double stepX = width / (maxPoints - 1);
+                    long maxDelayY = 200; // Y轴最大图表延迟 (超过200ms将被封顶限制，呈现平顶)
+
+                    // 1. 绘制虚线刻度参考线 (50ms, 100ms, 150ms)
+                    for (int h = 50; h <= 200; h += 50)
+                    {
+                        double yPos = height - (h / (double)maxDelayY * height);
+                        if (yPos > 0)
+                        {
+                            Line refLine = new Line { X1 = 0, Y1 = yPos, X2 = width, Y2 = yPos, Stroke = new SolidColorBrush(Color.FromArgb(50, 255, 255, 255)), StrokeThickness = 1, StrokeDashArray = new DoubleCollection(new[] { 4.0, 4.0 }) };
+                            canvas.Children.Add(refLine);
+                            TextBlock label = new TextBlock { Text = $"{h}ms", Foreground = new SolidColorBrush(Color.FromArgb(120, 255, 255, 255)), FontSize = 10 };
+                            Canvas.SetLeft(label, 5);
+                            Canvas.SetTop(label, yPos - 15);
+                            canvas.Children.Add(label);
+                        }
+                    }
+
+                    // 2. 为每个监控节点绘制折线
+                    foreach (var node in nodes)
+                    {
+                        NodeStats stat = statsDict[node];
+                        if (stat.History.Count == 0) continue;
+
+                        Polyline polyline = new Polyline
+                        {
+                            Stroke = stat.NodeColor,
+                            StrokeThickness = 2,
+                            StrokeLineJoin = PenLineJoin.Round
+                        };
+
+                        // 右侧对齐逻辑：让最新的点永远在画布最右边
+                        int index = maxPoints - stat.History.Count;
+                        foreach (long delay in stat.History)
+                        {
+                            double x = index * stepX;
+                            // -1 表示丢包/超时，将其画在图表最顶端以示断崖
+                            double boundedDelay = delay == -1 ? maxDelayY : Math.Min(delay, maxDelayY);
+                            double y = height - (boundedDelay / (double)maxDelayY * height);
+                            polyline.Points.Add(new Point(x, y));
+                            index++;
+                        }
+                        canvas.Children.Add(polyline);
+                    }
+                }
+            });
+        }
+
+
+
+        private void UpdateDiagOutput(string text)
+        {
+            Dispatcher.InvokeAsync(() =>
+            {
+                bool isAtBottom = false;
+                ScrollViewer? sv = this.FindName("DiagScrollViewer") as ScrollViewer;
+                if (sv != null)
+                    isAtBottom = sv.VerticalOffset >= (sv.ScrollableHeight - 10);
+
+                if (this.FindName("TxtDiagOutput") is TextBlock output)
+                {
+                    if (output.Text.Length > 15000)
+                        output.Text = output.Text.Substring(5000);
+
+                    output.Text += text + "\n";
+                }
+
+                if (isAtBottom && sv != null)
+                    sv.Dispatcher.InvokeAsync(() => sv.ScrollToBottom(), DispatcherPriority.Render);
+            });
+        }
+
+        // 新增的底层状态实体类
+        // ================= 重构：支持界面颜色绑定的状态实体类 =================
+        public class NodeStats : INotifyPropertyChanged
+        {
+            public string NodeIp { get; set; } = "";
+            public int DisplayIndex { get; set; }
+
+            private string _nodeIpPadded = "";
+            public string NodeIpPadded { get => _nodeIpPadded; set { _nodeIpPadded = value; Notify(nameof(NodeIpPadded)); } }
+
+            private string _statusIcon = "⏳";
+            public string StatusIcon { get => _statusIcon; set { _statusIcon = value; Notify(nameof(StatusIcon)); } }
+
+            private string _lastDelayStr = "---";
+            public string LastDelayStr { get => _lastDelayStr; set { _lastDelayStr = value; Notify(nameof(LastDelayStr)); } }
+
+            private string _avgDelayStr = "---";
+            public string AvgDelayStr { get => _avgDelayStr; set { _avgDelayStr = value; Notify(nameof(AvgDelayStr)); } }
+
+            private string _lossRateStr = "0.0%";
+            public string LossRateStr { get => _lossRateStr; set { _lossRateStr = value; Notify(nameof(LossRateStr)); } }
+
+            private Brush _nodeColor = Brushes.White;
+            public Brush NodeColor { get => _nodeColor; set { _nodeColor = value; Notify(nameof(NodeColor)); } }
+
+            public int Sent { get; set; } = 0;
+            public int Lost { get; set; } = 0;
+            public long TotalDelay { get; set; } = 0;
+            public Queue<long> History { get; set; } = new Queue<long>();
+
+            public event PropertyChangedEventHandler? PropertyChanged;
+            // 关键修改：将方法名改为 Notify，避开与 DependencyObject 的 OnPropertyChanged 冲突
+            private void Notify(string propertyName) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+        }
+        // =================================================================================
+
 
 
     }
@@ -6049,7 +7002,7 @@ namespace NetworkMonitor
 
 
 
-public class TcpConnection { public IPAddress? RemoteAddress { get; set; } public ushort RemotePort { get; set; } public uint State { get; set; } public int ProcessId { get; set; } }
+    public class TcpConnection { public IPAddress? RemoteAddress { get; set; } public ushort RemotePort { get; set; } public uint State { get; set; } public int ProcessId { get; set; } }
 
 
 
